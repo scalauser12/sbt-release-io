@@ -6,6 +6,16 @@ lazy val sub = (project in file("sub"))
     scalaVersion := "2.12.18"
   )
 
+// Loaded by sbt but intentionally omitted from the monorepo participant setting.
+// Its live baseDirectory differs from Project.base; detection must exclude the
+// live directory rather than the declared project location.
+lazy val ignored = (project in file("ignored-declared"))
+  .settings(
+    name          := "ignored",
+    scalaVersion  := "2.12.18",
+    baseDirectory := file("ignored-live")
+  )
+
 lazy val root = (project in file("."))
   .aggregate(sub)
   .enablePlugins(MonorepoReleasePlugin)
@@ -13,7 +23,8 @@ lazy val root = (project in file("."))
     name         := "root-proj",
     scalaVersion := "2.12.18",
 
-    // Include root project itself alongside aggregated sub-projects
+    // Include root project itself alongside aggregated sub-projects. `ignored`
+    // is loaded but not aggregated, so it is deliberately nonparticipating.
     releaseIOMonorepoSelectionProjects := thisProjectRef.value +: thisProject.value.aggregate,
 
     releaseIOMonorepoDetectionEnabled := true,

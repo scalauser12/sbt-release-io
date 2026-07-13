@@ -12,8 +12,11 @@ import scala.concurrent.duration.FiniteDuration
   */
 final class InvalidTagNameException(message: String) extends IllegalStateException(message)
 
-/** Outcome of resolving a tag's commit on a remote, used by the keep-path remote
-  * probe to decide whether a kept tag would survive the final atomic push.
+/** Outcome of resolving the commit a remote tag points to, peeling annotated tags.
+  *
+  * This result remains available for adapters and compatibility defaults. The
+  * keep-path push-safety probe uses exact `RemoteTagRef` identity when the VCS
+  * supplies it, because equal peeled commits do not imply equal tag refs.
   */
 sealed trait RemoteTagCommit
 object RemoteTagCommit {
@@ -26,6 +29,47 @@ object RemoteTagCommit {
 
   /** The remote could not be queried (timeout, network error, unreachable). */
   case object Unavailable extends RemoteTagCommit
+}
+
+/** Outcome of resolving the exact object stored in a local tag ref.
+  *
+  * [[LocalTagRef.Unsupported]] is deliberately distinct from [[LocalTagRef.Absent]]:
+  * compatibility adapters that only expose peeled commit hashes must retain the
+  * former commit-level keep check, while an authoritative Git lookup that reports
+  * an absent ref must abort before publish.
+  */
+private[release] sealed trait LocalTagRef
+private[release] object LocalTagRef {
+
+  /** The local tag ref stores this exact object hash. */
+  final case class At(refHash: String) extends LocalTagRef
+
+  /** An authoritative exact-ref lookup established that the local tag is absent. */
+  case object Absent extends LocalTagRef
+
+  /** The adapter does not distinguish exact-ref absence from an unsupported lookup. */
+  case object Unsupported extends LocalTagRef
+}
+
+/** Outcome of resolving the exact object stored in a remote tag ref.
+  *
+  * Unlike [[RemoteTagCommit]], [[RemoteTagRef.At]] does not peel annotated tags:
+  * its hash identifies the exact object stored in the ref (a tag object for an
+  * annotated tag, or the target object for a lightweight tag). Git's non-force
+  * tag push requires this exact ref value to match, even when two annotated tag
+  * objects ultimately point to the same commit.
+  */
+private[release] sealed trait RemoteTagRef
+private[release] object RemoteTagRef {
+
+  /** The remote does not advertise the tag (the push would create it freshly). */
+  case object Absent extends RemoteTagRef
+
+  /** The remote tag ref stores this exact object hash. */
+  final case class At(refHash: String) extends RemoteTagRef
+
+  /** The remote could not be queried (timeout, network error, unreachable). */
+  case object Unavailable extends RemoteTagRef
 }
 
 /** IO-native VCS adapter. All operations that perform I/O return `IO`;
@@ -96,6 +140,33 @@ trait Vcs {
     *       `TagConflictResolver` cannot detect commit-mismatch conflicts.
     */
   def tagCommitHash(name: String): IO[Option[String]] = IO.pure(None)
+
+  /** Resolve the exact object hash stored in a local tag ref without peeling
+    * annotated tags.
+    *
+    * The keep-path remote probe needs exact ref identity because a non-force Git
+    * push rejects a remote annotated tag with a different tag object, even when
+    * both objects peel to the same commit.
+    *
+    * The default delegates to [[tagCommitHash]] for compatibility with existing
+    * adapters. Such adapters retain the former commit-level comparison until they
+    * override this method with an exact-ref lookup.
+    */
+  private[release] def tagRefHash(name: String): IO[Option[String]] = tagCommitHash(name)
+
+  /** Resolve the exact local tag ref with an authoritative absence signal when
+    * the adapter supports one.
+    *
+    * The compatibility default maps a missing [[tagRefHash]] to
+    * [[LocalTagRef.Unsupported]], not [[LocalTagRef.Absent]]. Existing adapters
+    * therefore retain the peeled-commit fallback used before exact-ref probing,
+    * while production Git overrides this method with a strict lookup.
+    */
+  private[release] def localTagRef(name: String): IO[LocalTagRef] =
+    tagRefHash(name).map {
+      case Some(refHash) => LocalTagRef.At(refHash)
+      case None          => LocalTagRef.Unsupported
+    }
 
   /** Tracked files with unstaged local modifications.
     *
@@ -181,17 +252,12 @@ trait Vcs {
   /** Resolve the commit a tag points to on `remote`, bounded by `timeout`,
     * peeling annotated tags to their underlying commit.
     *
-    * Used by the keep-path tag preflight. When the release will KEEP an existing
-    * local tag (no new ref created), the final atomic push still advertises that
-    * tag with a non-force `refs/tags/X:refs/tags/X` update, which the remote
-    * rejects if it already holds the tag at a different commit. Comparing the
-    * remote tag's commit against the kept tag's commit lets the release abort
-    * before `publish-artifacts` runs, instead of failing at the final push with
-    * artifacts already published.
-    *
-    * Distinct from [[remoteTagExistsWithTimeout]] (existence only): a same-commit
-    * remote tag is a harmless no-op push and must NOT abort a keep, so the keep
-    * path needs the hash, not just presence.
+    * This commit-level query is retained for source compatibility and for callers
+    * that need tag semantics rather than exact ref identity. It cannot by itself
+    * predict whether a non-force tag push will succeed: distinct annotated tag
+    * objects may peel to the same commit but still conflict. The default exact-ref
+    * query maps this result for adapters that have not implemented a native ref
+    * lookup; production Git overrides both queries.
     *
     * Returns:
     *   - [[RemoteTagCommit.Absent]] — the remote does not advertise the tag.
@@ -213,6 +279,24 @@ trait Vcs {
     val _ = (remote, tagName, timeout)
     IO.pure(RemoteTagCommit.Unavailable)
   }
+
+  /** Resolve the exact object stored in `refs/tags/<tagName>` on `remote`,
+    * bounded by `timeout`, without peeling annotated tags.
+    *
+    * The default maps [[remoteTagCommitWithTimeout]] into the exact-ref result
+    * type for compatibility with existing adapters. Such adapters retain the
+    * former commit-level comparison until they override this method.
+    */
+  private[release] def remoteTagRefWithTimeout(
+      remote: String,
+      tagName: String,
+      timeout: FiniteDuration
+  ): IO[RemoteTagRef] =
+    remoteTagCommitWithTimeout(remote, tagName, timeout).map {
+      case RemoteTagCommit.Absent         => RemoteTagRef.Absent
+      case RemoteTagCommit.At(commitHash) => RemoteTagRef.At(commitHash)
+      case RemoteTagCommit.Unavailable    => RemoteTagRef.Unavailable
+    }
 
   // ── Actions (raise on non-zero exit) ─────────────────────────────────
 

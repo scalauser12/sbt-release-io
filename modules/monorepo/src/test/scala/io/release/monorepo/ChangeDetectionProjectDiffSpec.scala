@@ -105,6 +105,126 @@ class ChangeDetectionProjectDiffSpec extends CatsEffectSuite with ChangeDetectio
     }
   }
 
+  test("detectChangedProjects - exclude loaded child omitted from release participation") {
+    repoResource.use { repo =>
+      IO.blocking {
+        val childDir = new File(repo, "tools/fixture")
+        sbt.IO.createDirectory(childDir)
+        sbt.IO.write(new File(repo, "version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
+        sbt.IO.write(new File(childDir, "Fixture.scala"), "object Fixture {}\n")
+
+        TestSupport.initGitRepo(repo)
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+        TestSupport.runGit(repo, "tag", "root-v0.1.0")
+
+        sbt.IO.write(
+          new File(childDir, "Fixture.scala"),
+          "object Fixture { val changed = true }\n"
+        )
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Update nonparticipating child")
+      } *> detectVcs(repo).map(vcs => (vcs, testEnv(repo))).flatMap { case (vcs, env) =>
+        val root     = rootProject(repo)
+        // Use the same project id in a distinct build to pin ProjectRef-based scope keys.
+        val childRef = sbt.ProjectRef(new File(repo, "tools").toURI, "root")
+
+        detectChanged(
+          vcs,
+          Seq(root),
+          env.state,
+          loadedProjectBaseDirs = Map(
+            root.ref -> root.baseDir,
+            childRef -> new File(repo, "tools/fixture")
+          )
+        ).flatMap { changed =>
+          readLogs(
+            env,
+            required = Seq(
+              "root has only version/excluded file changes since " +
+                "root-v0.1.0, treating as unchanged"
+            )
+          ).map(_ => assert(changed.isEmpty))
+        }
+      }
+    }
+  }
+
+  test("detectChangedProjects - exclude a loaded strict descendant from a nested parent") {
+    repoResource.use { repo =>
+      IO.blocking {
+        val toolsDir   = new File(repo, "tools")
+        val fixtureDir = new File(toolsDir, "fixture")
+        sbt.IO.createDirectory(fixtureDir)
+        sbt.IO.write(
+          new File(toolsDir, "version.sbt"),
+          """version := "0.1.0-SNAPSHOT"""" + "\n"
+        )
+        sbt.IO.write(new File(fixtureDir, "Fixture.scala"), "object Fixture {}\n")
+
+        TestSupport.initGitRepo(repo)
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+        TestSupport.runGit(repo, "tag", "tools-v0.1.0")
+
+        sbt.IO.write(
+          new File(fixtureDir, "Fixture.scala"),
+          "object Fixture { val changed = true }\n"
+        )
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Update nested fixture")
+      } *> detectVcs(repo).map(vcs => (vcs, testEnv(repo))).flatMap { case (vcs, env) =>
+        val tools      = projectInfo(
+          repo,
+          name = "tools",
+          baseDir = new File(repo, "tools"),
+          versionFile = new File(repo, "tools/version.sbt")
+        )
+        val fixtureRef = sbt.ProjectRef(repo.toURI, "fixture")
+
+        detectChanged(
+          vcs,
+          Seq(tools),
+          env.state,
+          loadedProjectBaseDirs = Map(
+            tools.ref  -> tools.baseDir,
+            fixtureRef -> new File(repo, "tools/fixture")
+          )
+        ).map(changed => assert(changed.isEmpty))
+      }
+    }
+  }
+
+  test("detectChangedProjects - do not treat a loaded project with the same base as a child") {
+    repoResource.use { repo =>
+      IO.blocking {
+        sbt.IO.write(new File(repo, "version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
+        sbt.IO.write(new File(repo, "README.md"), "# Initial\n")
+
+        TestSupport.initGitRepo(repo)
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Initial commit")
+        TestSupport.runGit(repo, "tag", "root-v0.1.0")
+
+        sbt.IO.write(new File(repo, "README.md"), "# Changed\n")
+        TestSupport.runGit(repo, "add", ".")
+        TestSupport.runGit(repo, "commit", "-m", "Update root readme")
+      } *> detectVcs(repo).map(vcs => (vcs, testEnv(repo))).flatMap { case (vcs, env) =>
+        val root     = rootProject(repo)
+        val aliasRef = sbt.ProjectRef(new File(repo, "alias-build").toURI, "alias")
+
+        detectChanged(
+          vcs,
+          Seq(root),
+          env.state,
+          loadedProjectBaseDirs = Map(root.ref -> repo, aliasRef -> repo)
+        ).map { changed =>
+          assertEquals(changed.map(_.name), Seq("root"))
+        }
+      }
+    }
+  }
+
   test("detectChangedProjects - ignore additional excluded files beyond the version file") {
     repoResource.use { repo =>
       for {

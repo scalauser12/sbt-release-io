@@ -1,6 +1,7 @@
 package io.release.monorepo.internal.steps
 
 import cats.effect.IO
+import cats.effect.Ref
 import cats.syntax.all.*
 import io.release.ReleaseManifestMetadata
 import io.release.VcsOps
@@ -18,11 +19,11 @@ import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.workflow.DecisionResolver
 import io.release.runtime.workflow.StepHelpers.required
-import sbt.State
 import io.release.vcs.GitPushSupport
 import io.release.vcs.RemoteTagProbe
 import io.release.vcs.TagConflictResolver
 import io.release.vcs.Vcs
+import sbt.State
 
 /** VCS-related monorepo release steps. */
 private[monorepo] object MonorepoVcsSteps {
@@ -36,6 +37,108 @@ private[monorepo] object MonorepoVcsSteps {
       willCreateTag: Boolean,
       keepRemoteCommitProbe: Option[String] = None
   )
+
+  private final case class RenderedTagName(
+      project: ProjectReleaseInfo,
+      tagName: String
+  )
+
+  private def renderTagNames(ctx: MonorepoContext): IO[Seq[RenderedTagName]] =
+    MonorepoTagSettings.resolveTagSettings(ctx.state).flatMap { settings =>
+      ctx.currentProjects.toList.traverse { project =>
+        required(project.resolvedVersions, s"Resolved versions not set for ${project.name}") {
+          case (releaseVersion, _) =>
+            warnIfTagFormatterDropsWildcard(
+              ctx.state,
+              project.name,
+              settings.perProjectTagName
+            ).as(
+              RenderedTagName(
+                project,
+                settings.perProjectTagName(project.name, releaseVersion)
+              )
+            )
+        }
+      }
+    }
+
+  /** Group duplicate tag names in deterministic input order without rescanning
+    * the complete project batch once per distinct tag.
+    *
+    * The forward map supplies scalable lookup while `tagOrder` preserves the
+    * existing error order (first occurrence of each tag). Each owner vector is
+    * appended in selected-project order. String keys remain exact and
+    * case-sensitive.
+    */
+  private[monorepo] def duplicateTagGroups(
+      entries: Seq[(String, String)]
+  ): Vector[(String, Vector[String])] = {
+    val initial                   = Vector.empty[String] -> Map.empty[String, Vector[String]]
+    val (tagOrder, projectsByTag) = entries.foldLeft(initial) {
+      case ((order, grouped), (projectName, tagName)) =>
+        grouped.get(tagName) match {
+          case Some(projects) =>
+            order -> grouped.updated(tagName, projects :+ projectName)
+          case None           =>
+            (order :+ tagName) -> grouped.updated(tagName, Vector(projectName))
+        }
+    }
+
+    tagOrder.flatMap { tagName =>
+      val projects = projectsByTag(tagName)
+      if (projects.lengthCompare(1) > 0) Some(tagName -> projects) else None
+    }
+  }
+
+  private def validateUniqueTagNames(entries: Seq[(String, String)]): IO[Unit] = {
+    val duplicateGroups = MonorepoVcsSteps.duplicateTagGroups(entries)
+
+    if (duplicateGroups.isEmpty) IO.unit
+    else {
+      val details = duplicateGroups
+        .map { case (tagName, projects) =>
+          s"[$tagName] -> [${projects.mkString(", ")}]"
+        }
+        .mkString("; ")
+      IO.raiseError(
+        new IllegalStateException(
+          "releaseIOMonorepoVcsTagName must produce a unique tag for every selected " +
+            s"project; duplicate tag batch: $details"
+        )
+      )
+    }
+  }
+
+  private def validateUniqueRenderedTagNames(rendered: Seq[RenderedTagName]): IO[Unit] =
+    validateUniqueTagNames(rendered.map(entry => entry.project.name -> entry.tagName))
+
+  private def validateRenderedTagNamesWithVcs(
+      ctx: MonorepoContext,
+      rendered: Seq[RenderedTagName]
+  ): IO[Unit] =
+    if (rendered.isEmpty) IO.unit
+    else
+      required(ctx.vcs, MissingVcsMessage) { vcs =>
+        rendered.toList.traverse_(entry => vcs.validateTagName(entry.tagName))
+      }
+
+  private def validateTagReservation(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo,
+      candidate: String
+  ): IO[Unit] = {
+    val conflicts = ctx.tagReservationConflicts(project.ref, candidate)
+
+    if (conflicts.isEmpty) IO.unit
+    else
+      IO.raiseError(
+        new IllegalStateException(
+          s"Tag [$candidate] resolved for ${project.name}, but the same release batch " +
+            s"reserves it for [${conflicts.mkString(", ")}]. " +
+            "releaseIOMonorepoVcsTagName and replacement tag answers must remain unique."
+        )
+      )
+  }
 
   val initializeVcs: GlobalStep = ProcessStep.Single(
     name = "initialize-vcs",
@@ -59,6 +162,7 @@ private[monorepo] object MonorepoVcsSteps {
 
   private def createTag(
       ctx: MonorepoContext,
+      project: ProjectReleaseInfo,
       vcs: Vcs,
       tagName: String,
       comment: String,
@@ -86,13 +190,15 @@ private[monorepo] object MonorepoVcsSteps {
           // publish-artifacts would run, and only the global atomic push at the
           // end would fail — leaving partially-published artifacts without the
           // matching pushed release tags.
-          beforeCreateTag =
-            finalTagName => remoteTagPreflightForCreate(ctx, vcs, finalTagName, label),
+          beforeCreateTag = finalTagName =>
+            validateTagReservation(ctx, project, finalTagName) *>
+              remoteTagPreflightForCreate(ctx, vcs, finalTagName, label),
           // Keep path: a kept per-project tag still rides the final atomic push;
-          // catch a divergent remote tag before publish (hash-aware, so a
-          // same-commit remote tag does not over-abort).
+          // compare exact ref objects so distinct annotated tags are rejected even
+          // when they peel to the same commit.
           beforeKeepTag = (finalTagName, expectedHash) =>
-            remoteTagKeepProbe(ctx, vcs, finalTagName, expectedHash, label)
+            validateTagReservation(ctx, project, finalTagName) *>
+              remoteTagKeepProbe(ctx, vcs, finalTagName, expectedHash, label)
         )
       )
       .map { case (updatedCtx, tagName) =>
@@ -135,7 +241,7 @@ private[monorepo] object MonorepoVcsSteps {
   /** Keep-path counterpart of [[remoteTagPreflightForPreflightStep]]: when the
     * resolver's deterministic verdict is to KEEP an existing per-project tag, the
     * kept tag still rides the global atomic push. Probe the remote with a
-    * hash-aware check so a divergent remote tag aborts before publish.
+    * exact-ref check so a divergent tag object aborts before publish.
     */
   private def remoteTagKeepPreflightStep(
       ctx: MonorepoContext,
@@ -214,26 +320,22 @@ private[monorepo] object MonorepoVcsSteps {
         vcs.currentHash.map(TagConflictResolver.PreflightCommitTarget.ExactCommit(_))
   ): IO[Seq[PreflightTagOutcome]] =
     required(ctx.vcs, "VCS not initialized") { vcs =>
-      // Check mode only reaches tag preflight after MonorepoPreflight has ruled out tag-affecting
-      // runtime hook state, so a single tag-settings resolution here is stable enough. Live tagging
-      // still re-resolves below per project to observe late-bound before-tag mutations.
-      MonorepoTagSettings.resolveTagSettings(ctx.state).flatMap { settings =>
-        ctx.currentProjects.toList.traverse { project =>
-          required(project.resolvedVersions, s"Resolved versions not set for ${project.name}") {
-            case (releaseVer, _) =>
-              val rendered = settings.perProjectTagName(project.name, releaseVer)
-              warnIfTagFormatterDropsWildcard(
-                ctx.state,
-                project.name,
-                settings.perProjectTagName
-              ) *>
-                preflightTagTarget(vcs)
-                  .flatMap(target =>
-                    preflightCreateTag(ctx, vcs, rendered, target, project.name, interactive)
-                  )
-          }
-        }
-      }
+      for {
+        rendered <- renderTagNames(ctx)
+        _        <- validateUniqueRenderedTagNames(rendered)
+        target   <- preflightTagTarget(vcs)
+        outcomes <- rendered.toList.traverse { entry =>
+                      preflightCreateTag(
+                        ctx,
+                        vcs,
+                        entry.tagName,
+                        target,
+                        entry.project.name,
+                        interactive
+                      )
+                    }
+        _        <- validateUniqueTagNames(outcomes.map(o => o.projectName -> o.rendered))
+      } yield outcomes
     }
 
   /** Soft-warn when `releaseIOMonorepoVcsTagName` drops the version argument.
@@ -277,11 +379,10 @@ private[monorepo] object MonorepoVcsSteps {
     * the working tree clean — the bug class is "abort surfaces only after
     * commit-release-versions / publish-artifacts has already landed".
     *
-    * Per-item with isolation: each project is preflighted independently so all
-    * errors are reported at once and a single failing project does not mask the
-    * remaining projects' diagnostics. Per-project failures still propagate to
-    * the global context (via `runPerProjectTracked`), so once any preflight fails the
-    * release skips every later step (`set-release-versions`,
+    * The global tracked step prepares the rendered-name batch and target commit once,
+    * then uses `runPerProjectTracked` so each project's conflict and remote probes retain
+    * error isolation. Per-project failures still propagate to the global context, so once
+    * any preflight fails the release skips every later step (`set-release-versions`,
     * `commit-release-versions`, `tag-releases`, `publish-artifacts`,
     * `push-changes`) — the clean-abort outcome the reviewer asked for.
     *
@@ -294,66 +395,85 @@ private[monorepo] object MonorepoVcsSteps {
     * rely on the in-resolver `beforeCreateTag` callback in `tag-releases` to catch
     * remote-only conflicts on the post-hook tag name.
     */
-  private[monorepo] val tagPreflight: ProjectStep = ProcessStep.PerItem(
+  private[monorepo] val tagPreflight: GlobalStep = ProcessStep.Single.tracked(
     name = "tag-preflight",
-    execute = (ctx, project) => runProjectTagPreflight(ctx, project).as(ctx)
+    executeTracked = handle =>
+      handle.get.flatMap { initialCtx =>
+        if (initialCtx.currentProjects.isEmpty) IO.unit
+        else
+          for {
+            rendered     <- renderTagNames(initialCtx)
+            _            <- validateUniqueRenderedTagNames(rendered)
+            renderedByRef = rendered.map(entry => entry.project.ref -> entry.tagName).toMap
+            prepared     <- required(initialCtx.vcs, MissingVcsMessage) { vcs =>
+                              tagPreflightTarget(initialCtx, vcs).map(target => vcs -> target)
+                            }.attempt
+            outcomes     <- Ref.of[IO, Vector[PreflightTagOutcome]](Vector.empty)
+            _            <- runPerProjectTracked(
+                              handle,
+                              (projectHandle, project) =>
+                                for {
+                                  currentCtx   <- projectHandle.get
+                                  pair         <- IO.fromEither(prepared)
+                                  (vcs, target) = pair
+                                  tagName      <- IO.fromOption(renderedByRef.get(project.ref))(
+                                                    new IllegalStateException(
+                                                      s"Missing preflight tag plan for ${project.name}"
+                                                    )
+                                                  )
+                                  outcome      <- runProjectTagPreflight(
+                                                    currentCtx,
+                                                    project,
+                                                    vcs,
+                                                    target,
+                                                    tagName
+                                                  )
+                                  _            <- outcomes.update(_ :+ outcome)
+                                } yield ()
+                            )
+            finalCtx     <- handle.get
+            _            <-
+              if (finalCtx.failed) IO.unit
+              else
+                outcomes.get.flatMap(results =>
+                  validateUniqueTagNames(results.map(o => o.projectName -> o.rendered))
+                )
+          } yield ()
+      }
   )
 
   private def runProjectTagPreflight(
       ctx: MonorepoContext,
-      project: ProjectReleaseInfo
+      project: ProjectReleaseInfo,
+      vcs: Vcs,
+      target: TagConflictResolver.PreflightCommitTarget,
+      rendered: String
   ): IO[PreflightTagOutcome] =
-    required(ctx.vcs, MissingVcsMessage) { vcs =>
-      required(project.resolvedVersions, s"Resolved versions not set for ${project.name}") {
-        case (releaseVer, _) =>
-          MonorepoTagSettings.resolveTagSettings(ctx.state).flatMap { settings =>
-            val rendered = settings.perProjectTagName(project.name, releaseVer)
-            warnIfTagFormatterDropsWildcard(
-              ctx.state,
-              project.name,
-              settings.perProjectTagName
-            ) *>
-              tagPreflightTarget(ctx, vcs).flatMap { target =>
-                preflightCreateTag(
-                  ctx,
-                  vcs,
-                  rendered,
-                  target,
-                  project.name,
-                  ctx.interactive
-                ).flatTap(outcome =>
-                  // Probe the FINAL tag name resolved by `preflightCreateTag`
-                  // (post-retry / post-prompt). When `default-tag-exists-answer
-                  // <newTag>` redirects from `rendered` to the replacement, the
-                  // outcome's `rendered` field carries the replacement; passing
-                  // the original `rendered` would let the gate short-circuit
-                  // (the original IS in the local repo — that is what triggered
-                  // the retry) and miss a remote-only conflict on the
-                  // replacement.
-                  //
-                  // The gate is the resolver's `willCreateTag` verdict, not
-                  // local existence: `default-tag-exists-answer o` (overwrite)
-                  // also triggers a tag ref update at push time, so the probe
-                  // must run even when the tag exists locally.
-                  remoteTagPreflightForPreflightStep(
-                    ctx,
-                    vcs,
-                    outcome.rendered,
-                    project.name,
-                    outcome.willCreateTag
-                  ) *>
-                    remoteTagKeepPreflightStep(
-                      ctx,
-                      vcs,
-                      outcome.rendered,
-                      project.name,
-                      outcome.keepRemoteCommitProbe
-                    )
-                )
-              }
-          }
-      }
-    }
+    preflightCreateTag(
+      ctx,
+      vcs,
+      rendered,
+      target,
+      project.name,
+      ctx.interactive
+    ).flatTap(outcome =>
+      // Probe the FINAL tag name resolved by `preflightCreateTag` (post-retry /
+      // post-prompt), and gate create/overwrite by the resolver's actual verdict.
+      remoteTagPreflightForPreflightStep(
+        ctx,
+        vcs,
+        outcome.rendered,
+        project.name,
+        outcome.willCreateTag
+      ) *>
+        remoteTagKeepPreflightStep(
+          ctx,
+          vcs,
+          outcome.rendered,
+          project.name,
+          outcome.keepRemoteCommitProbe
+        )
+    )
 
   /** Determine the commit the per-project tags will point to at execute time.
     *
@@ -397,6 +517,29 @@ private[monorepo] object MonorepoVcsSteps {
     if (!willCreateTag) IO.unit
     else remoteTagPreflightForCreate(ctx, vcs, tagName, label)
 
+  /** Freeze and validate the post-`beforeTag` tag-name batch before the first tag
+    * side effect. This guard remains enabled even when tag-affecting hooks disable
+    * the earlier preflight.
+    */
+  private[monorepo] val planTagNames: GlobalStep = ProcessStep.Single(
+    name = "plan-tag-names",
+    execute = ctx =>
+      if (ctx.currentProjects.isEmpty) IO.pure(ctx)
+      else
+        for {
+          rendered <- renderTagNames(ctx)
+          _        <- validateUniqueRenderedTagNames(rendered)
+          _        <- validateRenderedTagNamesWithVcs(ctx, rendered)
+          planned   = rendered.map(entry =>
+                        MonorepoContext.TagPlanEntry(
+                          ref = entry.project.ref,
+                          label = entry.project.name,
+                          tagName = entry.tagName
+                        )
+                      )
+        } yield ctx.withPlannedTagNames(planned)
+  )
+
   private[monorepo] val tagReleasesPerProject: ProjectStep =
     ProcessStep.PerItem(
       name = "tag-releases",
@@ -408,13 +551,16 @@ private[monorepo] object MonorepoVcsSteps {
               // Resolved per-project: tag name/comment depend on releaseIORuntimeCurrentVersion
               // which varies by project.
               MonorepoTagSettings.resolveTagSettings(ctx.state).flatMap { settings =>
-                val initialTagName = settings.perProjectTagName(project.name, releaseVer)
+                val initialTagName = ctx
+                  .plannedTagName(project.ref)
+                  .getOrElse(settings.perProjectTagName(project.name, releaseVer))
                 // releaseIOInternalReleaseHash remains provenance for manifests/publish, but
                 // global/per-project hooks may have advanced HEAD after the release commit; tag
                 // conflicts must follow the commit `git tag` would tag right now.
                 vcs.currentHash.flatMap { expectedCommitHash =>
                   createTag(
                     ctx,
+                    project,
                     vcs,
                     initialTagName,
                     settings.tagComment(project.name, releaseVer),
@@ -422,9 +568,13 @@ private[monorepo] object MonorepoVcsSteps {
                     expectedCommitHash,
                     project.name
                   ).flatMap { case (updatedCtx, resolvedTagName) =>
-                    ExecutionEngine.recoverWithContext(ReleaseLogPrefixes.Monorepo, updatedCtx)(
+                    val reservedCtx = updatedCtx.recordResolvedTagName(project.ref, resolvedTagName)
+                    ExecutionEngine.recoverWithContext(ReleaseLogPrefixes.Monorepo, reservedCtx)(
                       for {
-                        _        <- logInfo(updatedCtx, s"Tagged ${project.name} as $resolvedTagName")
+                        _        <- logInfo(
+                                      reservedCtx,
+                                      s"Tagged ${project.name} as $resolvedTagName"
+                                    )
                         // Install the per-project tag setting into `session.rawAppend`
                         // via appendSessionSettings so it survives every subsequent
                         // `appendWithSession` call (publish overlays, hook installs).
@@ -435,7 +585,7 @@ private[monorepo] object MonorepoVcsSteps {
                         // the release.
                         newState <- IO.blocking {
                                       val lifted = MonorepoVersionFiles
-                                        .liftLateBoundVersioningSettings(updatedCtx.state)
+                                        .liftLateBoundVersioningSettings(reservedCtx.state)
                                       SbtRuntime.appendSessionSettings(
                                         lifted,
                                         ReleaseManifestMetadata
@@ -445,7 +595,7 @@ private[monorepo] object MonorepoVcsSteps {
                                           )
                                       )
                                     }
-                      } yield updatedCtx
+                      } yield reservedCtx
                         .withState(newState)
                         .updateProject(project.ref)(_.copy(tagName = Some(resolvedTagName)))
                     )

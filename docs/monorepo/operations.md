@@ -8,7 +8,7 @@ tags. Substitute the actual tag names your release created.
 ### What each release step modifies
 
 Only mutating steps are listed; preflight checks (`check-clean-working-dir`,
-`inquire-versions`, `tag-preflight`, `resolve-release-order`, `detect-or-select-projects`,
+`inquire-versions`, `tag-preflight`, `plan-tag-names`, `resolve-release-order`, `detect-or-select-projects`,
 etc.) leave no state behind.
 
 | Step | Modifies |

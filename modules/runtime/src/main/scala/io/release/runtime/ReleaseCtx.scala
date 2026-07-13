@@ -89,6 +89,9 @@ private[release] trait ReleaseCtx {
     if (publishSkipFrozen.isDefined) self
     else withMetadata(ReleaseCtx.publishSkipFrozenKey, skip)
 
+  private[release] def clearFrozenPublishSkip: Self =
+    withoutMetadata(ReleaseCtx.publishSkipFrozenKey)
+
   /** True iff `push-changes` actually pushed to the remote during this release. False when the
     * operator declined the push. Used to gate `after-push` hooks on the real push outcome.
     */

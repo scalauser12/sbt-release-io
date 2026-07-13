@@ -26,16 +26,16 @@ private[release] object TagConflictResolver {
     *                       remote tag probe: the probe must run whenever the release will
     *                       actually try to create or update a tag ref, because the atomic
     *                       push uses non-force `refs/tags/X:refs/tags/X` and a remote-only
-    *                       conflict (or a remote tag at a different commit) would otherwise
+    *                       conflict (or a remote tag with a different ref object) would otherwise
     *                       only surface at the final push, after release-version writes and
     *                       the release commit have already landed.
     * @param keepRemoteCommitProbe
     *                       `Some(expectedCommitHash)` when the deterministic verdict is to KEEP
     *                       an existing local tag at that commit. No new local ref lands
     *                       (`willCreateTag = false`), but the kept tag is still pushed with a
-    *                       non-force update, so callers must run the hash-aware keep probe
+    *                       non-force update, so callers must run the exact-ref-aware keep probe
     *                       (`RemoteTagProbe.probeForKeep`) to abort before publish when the
-    *                       remote holds the tag at a different commit. `None` for every other
+    *                       remote holds a different tag object. `None` for every other
     *                       verdict (create/overwrite/abort/interactive).
     */
   final case class PreflightOutcome(
@@ -72,9 +72,9 @@ private[release] object TagConflictResolver {
     * `beforeKeepTag` is the keep-path analogue: invoked with `(tagName,
     * expectedCommitHash)` immediately before the resolver settles on KEEPING an
     * existing local tag. No new ref is created locally, but the kept tag is still
-    * pushed with a non-force update, so callers run the hash-aware remote keep
+    * pushed with a non-force update, so callers run the exact-ref-aware remote keep
     * probe here to abort before `publish-artifacts` when the remote holds the tag
-    * at a different commit. Default is a no-op.
+    * at a different ref object. Default is a no-op.
     */
   final case class TagParams(
       tagName: String,
@@ -156,7 +156,7 @@ private[release] object TagConflictResolver {
                 case (nextCtx, ParsedAnswer.Keep) if matchesExpectedCommit =>
                   // The kept tag lands in the final atomic push with a non-force
                   // `refs/tags/X:refs/tags/X` update, which the remote rejects if it
-                  // holds the tag at a different commit. Probe the remote here so the
+                  // holds the tag at a different ref object. Probe the remote here so the
                   // release aborts before `publish-artifacts` rather than failing at
                   // the push with artifacts already published.
                   params.beforeKeepTag(tagName, params.expectedCommitHash) *>
@@ -260,11 +260,11 @@ private[release] object TagConflictResolver {
                         IO.pure(
                           // Keep: no new local ref will land, but the kept tag is
                           // still pushed with a non-force `refs/tags/X:refs/tags/X`
-                          // update, which the remote rejects if it holds the tag at
-                          // a different commit. Signal the keep so the caller runs
-                          // the hash-aware remote probe and aborts before publish
-                          // (instead of the existence-only probe, which would
-                          // over-abort on a harmless same-commit remote tag).
+                          // update, which the remote rejects if it holds a different
+                          // tag object. Signal the keep so the caller runs the exact-ref
+                          // remote probe and aborts before publish (instead of the
+                          // existence-only probe, which would over-abort on an identical
+                          // remote ref).
                           PreflightOutcome(
                             tagName,
                             "exists; release will keep the existing tag",
@@ -345,9 +345,9 @@ private[release] object TagConflictResolver {
       case Some(ParsedAnswer.Keep)              => onKeep
       case Some(ParsedAnswer.Overwrite)         =>
         // Overwrite: local force-recreates the tag and the push will attempt
-        // a non-force `refs/tags/X:refs/tags/X` update. A remote-only tag at
-        // a different commit would still reject the push, so the remote
-        // probe must run despite local existence — `willCreateTag = true`.
+        // a non-force `refs/tags/X:refs/tags/X` update. Any remote-only tag
+        // can reject that push, so the remote probe must run despite local
+        // existence — `willCreateTag = true`.
         IO.pure(
           PreflightOutcome(
             tagName,

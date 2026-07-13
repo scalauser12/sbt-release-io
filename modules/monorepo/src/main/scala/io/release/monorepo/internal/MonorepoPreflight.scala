@@ -142,8 +142,10 @@ private[monorepo] object MonorepoPreflight {
       tagPreflightInteractive: Boolean
   ): IO[Summary] =
     for {
-      preSelectionValidated  <- validateSegment(
+      preSelectionValidated  <- validateStableSetupPrefix(
                                   processPlan.preSelectionSetupSteps,
+                                  SelectionBlockingPhases,
+                                  "pre-selection",
                                   crossBuildEnabled
                                 )(baseCtx)
       checkedPreSelection    <- ExecutionEngine.raiseIfFailed(preSelectionValidated)
@@ -153,8 +155,10 @@ private[monorepo] object MonorepoPreflight {
       postSelectionValidated <-
         selected.selectionMode match {
           case Evaluation.Resolved(_)     =>
-            validatePostSelectionSetupPrefix(
+            validateStableSetupPrefix(
               processPlan.postSelectionSetupSteps,
+              Set(HookPhases.AfterSelection),
+              "post-selection",
               crossBuildEnabled
             )(checkedSelect)
           case Evaluation.NotEvaluated(_) =>
@@ -192,16 +196,48 @@ private[monorepo] object MonorepoPreflight {
       checkSteps: CheckSteps,
       crossBuildEnabled: Boolean,
       tagPreflightInteractive: Boolean
-  ): IO[Summary] =
-    checkVersionAwareSegment(
-      baseCtx = baseCtx,
-      selectionMode = Evaluation.NotEvaluated(stepNotInCheckProcess(DetectOrSelectProjectsStep)),
-      projects = Evaluation.Resolved(()),
-      processPlan = processPlan,
-      checkSteps = checkSteps,
-      crossBuildEnabled = crossBuildEnabled,
-      tagPreflightInteractive = tagPreflightInteractive
-    )
+  ): IO[Summary] = {
+    val selectionMode =
+      Evaluation.NotEvaluated(stepNotInCheckProcess(DetectOrSelectProjectsStep))
+    val projects      = Evaluation.Resolved(())
+
+    if (!containsHook(processPlan.mainSteps, NoBoundarySetupHookPhases))
+      checkVersionAwareSegment(
+        baseCtx = baseCtx,
+        selectionMode = selectionMode,
+        projects = projects,
+        processPlan = processPlan,
+        checkSteps = checkSteps,
+        crossBuildEnabled = crossBuildEnabled,
+        tagPreflightInteractive = tagPreflightInteractive
+      )
+    else
+      for {
+        prefixValidated <- validateStableSetupPrefix(
+                             processPlan.mainSteps,
+                             NoBoundarySetupHookPhases,
+                             "no-boundary",
+                             crossBuildEnabled
+                           )(baseCtx)
+        checkedCtx      <- ExecutionEngine.raiseIfFailed(prefixValidated)
+        versionSnapshot <- resolveVersionSnapshot(checkedCtx, projects, checkSteps)
+        tagOutcomes     <- resolveTagSnapshot(
+                             checkedCtx,
+                             versionSnapshot,
+                             checkSteps,
+                             tagPreflightInteractive
+                           )
+        summary         <- buildSummary(
+                             selectionMode = selectionMode,
+                             projects = projects,
+                             versions = versionSnapshot.versions,
+                             ctx = checkedCtx,
+                             tagOutcomes = tagOutcomes,
+                             processPlan = processPlan,
+                             crossBuildEnabled = crossBuildEnabled
+                           )
+      } yield summary
+  }
 
   private def checkVersionAwareSegment(
       baseCtx: MonorepoContext,
@@ -264,16 +300,20 @@ private[monorepo] object MonorepoPreflight {
       ctx
     )
 
-  private def validatePostSelectionSetupPrefix(
+  private def validateStableSetupPrefix(
       steps: Seq[AnyStep],
+      hookPhases: Set[String],
+      segmentLabel: String,
       crossBuild: Boolean
   )(ctx: MonorepoContext): IO[MonorepoContext] = {
-    // Runtime setup validates and executes each after-selection hook in sequence, so once
-    // there is more than one hook, later validations may depend on earlier hook executes.
-    // Check mode never replays hook executes, so it can only validate the safe leading prefix.
-    val safePrefix =
-      if (steps.lengthCompare(1) <= 0) steps
-      else steps.take(1)
+    // Runtime setup validates and executes each step in sequence. Once the first hook is
+    // reached, every later validator may depend on that hook's execute result — including a
+    // hook in a different phase of the same setup segment. Check mode never replays arbitrary
+    // hook executes, so only the prefix through that first hook is stable.
+    val firstHookIndex =
+      steps.indexWhere(step => hookPhases.exists(phase => step.name.startsWith(s"$phase:")))
+    val safePrefix     =
+      if (firstHookIndex < 0) steps else steps.take(firstHookIndex + 1)
 
     val skipped = steps.size - safePrefix.size
     val notify  =
@@ -281,12 +321,15 @@ private[monorepo] object MonorepoPreflight {
       else
         MonorepoStepHelpers.logInfo(
           ctx,
-          s"check mode: skipping validation of $skipped ${HookPhases.AfterSelection} hook(s) " +
-            "beyond the first; later hooks may depend on earlier hook executes"
+          s"check mode: skipping $skipped $segmentLabel setup validation(s) after the " +
+            "first hook; later validators may depend on that hook's execute result"
         )
 
     notify *> validateSegment(safePrefix, crossBuild)(ctx)
   }
+
+  private def containsHook(steps: Seq[AnyStep], hookPhases: Set[String]): Boolean =
+    steps.exists(step => hookPhases.exists(phase => step.name.startsWith(s"$phase:")))
 
   private[monorepo] def builtInReleaseWritesWouldChange(ctx: MonorepoContext): IO[Boolean] =
     // Sequential traverse: MonorepoVersionFiles.resolveInputs reads sbt state, which is not
@@ -385,6 +428,8 @@ private[monorepo] object MonorepoPreflight {
     HookPhases.AfterCleanCheck,
     HookPhases.BeforeSelection
   )
+  private val NoBoundarySetupHookPhases       =
+    SelectionBlockingPhases + HookPhases.AfterSelection
   private val ProjectSummaryMutationPhases    =
     SelectionBlockingPhases ++ Set(HookPhases.AfterSelection)
   private val VersionResolutionBlockingPhases =

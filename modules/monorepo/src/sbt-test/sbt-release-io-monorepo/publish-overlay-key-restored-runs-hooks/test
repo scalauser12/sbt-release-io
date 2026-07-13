@@ -1,0 +1,12 @@
+# Validation applies the release version transiently, so the publish gate is
+# frozen under Scala B. During execution, an after-release-version hook restores
+# Scala A before publishing. Publish and both surrounding hooks must still run.
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+> releaseIOMonorepo core with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT
+
+> checkPublishOverlayKeyRestored

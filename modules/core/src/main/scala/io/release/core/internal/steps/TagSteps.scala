@@ -178,9 +178,9 @@ private[release] object TagSteps {
 
   /** Keep-path counterpart of [[remoteTagPreflight]]: when the resolver's
     * deterministic verdict is to KEEP an existing local tag, the kept tag still
-    * rides the final atomic push with a non-force update. Probe the remote with a
-    * hash-aware check (a same-commit remote tag is a harmless no-op and must not
-    * abort) so a divergent remote tag aborts before any side effect lands.
+    * rides the final atomic push with a non-force update. Probe the remote with an
+    * exact-ref check so an identical remote ref remains a harmless no-op while a
+    * different annotated tag object aborts even if it peels to the same commit.
     */
   private[release] def remoteTagKeepPreflight(
       ctx: ReleaseContext,

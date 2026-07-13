@@ -1,0 +1,13 @@
+# With publish checks disabled, cross-build attempt A changes to B before the
+# publish action, succeeds under B, and returns the state to A. The distinct B
+# attempt then skips. afterPublish must follow A's successful B source exactly
+# once while observing the publish task's returned A state.
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .
+$ exec git commit -m "Initial commit"
+
+> releaseIOMonorepo core cross with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT
+
+> checkAfterPublish

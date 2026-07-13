@@ -32,7 +32,7 @@ lazy val root = (project in file("."))
         s"Expected pre-existing tag core/v1.0.0 but tags are: ${tags.mkString(", ")}"
       )
 
-      // The new monorepo `tag-preflight` step runs per-item with isolation BUT
+      // The monorepo batch `tag-preflight` preserves per-project isolation BUT
       // propagates project failures to the global context, so when ANY project
       // fails preflight (here: core's pre-existing tag with the abort-on-default
       // configured answer) every later phase is skipped — set-release-versions,

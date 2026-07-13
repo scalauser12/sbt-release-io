@@ -2,7 +2,7 @@ import scala.sys.process.*
 
 // Mirror of the core `invalid-tag-name-fails-preflight` regression for the
 // monorepo plugin. The monorepo lifecycle now includes an in-flow
-// `tag-preflight` step that runs per-item with isolation + propagation, so a
+// tracked batch `tag-preflight` step that preserves per-project isolation + propagation, so a
 // `releaseIOMonorepo` release (not just `check`) rejects an invalid
 // `releaseIOMonorepoVcsTagName` formatter before any side effect lands. The
 // `check` mode invariant below is the historical regression and remains

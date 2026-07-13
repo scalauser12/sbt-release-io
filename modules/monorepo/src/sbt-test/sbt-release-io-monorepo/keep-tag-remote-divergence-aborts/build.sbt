@@ -2,9 +2,9 @@ import scala.sys.process.*
 
 // Pin the monorepo keep-path remote-divergence guard. When the release will KEEP
 // an existing per-project tag (`core/v0.1.0` already points at the release commit,
-// so no new ref is created locally) but the SAME tag exists on the remote at a
-// DIFFERENT commit, the global atomic push would reject the non-force tag update —
-// only AFTER publish has already run. The hash-aware keep probe must abort at
+// so no new ref is created locally) but the SAME tag exists on the remote as a
+// DIFFERENT annotated tag object, the global atomic push rejects the non-force
+// update even when both objects peel to the same commit. The exact-ref probe must abort at
 // `tag-preflight` instead, before any version write, commit, or publish.
 lazy val core = (project in file("core"))
   .settings(
@@ -32,7 +32,7 @@ lazy val root = (project in file("."))
 
 val checkKeepDivergenceAborted =
   taskKey[Unit](
-    "Verify the release aborted before mutating core's version file or creating a commit."
+    "Verify exact tag-object divergence aborted before mutating the release."
   )
 
 checkKeepDivergenceAborted := {

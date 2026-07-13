@@ -25,7 +25,7 @@ $ exec git -C temp-clone push origin core/v0.1.0
 -$ exec git rev-parse --verify --quiet refs/tags/core/v0.1.0
 
 # The release MUST abort at `tag-preflight` before any side effect lands. The
-# per-project tag-preflight runs with isolation+propagation: core's preflight
+# batch tag-preflight preserves per-project isolation+propagation: core's preflight
 # raises (remote-only conflict), the failure propagates, and every later
 # phase (set-release-versions, commit-release-versions, tag-releases,
 # publish-artifacts, push-changes) is skipped.

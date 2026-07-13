@@ -122,13 +122,14 @@ Hook semantics:
 - global lifecycle points use `MonorepoGlobalHookIO`
 - per-project lifecycle points use `MonorepoProjectHookIO`
 - `releaseIOMonorepo check` validates the same hook and policy configuration the real
-  release would run; selection- and version-dependent validation is deferred when runtime
-  hooks could still change those inputs
+  release would run; in sequential setup segments it validates only through the first hook,
+  because later validators may depend on that hook's execute result, and selection- and
+  version-dependent validation is deferred when runtime hooks could still change those inputs
 
 ### Hooks that rewrite tag settings
 
-The early `tag-preflight` step evaluates `releaseIOMonorepoVcsTagName` once per
-project before any of the `beforeReleaseVersionWrite`, `afterReleaseVersionWrite`,
+The early `tag-preflight` step evaluates `releaseIOMonorepoVcsTagName` once for the
+whole selected-project batch before any of the `beforeReleaseVersionWrite`, `afterReleaseVersionWrite`,
 `beforeReleaseCommit`, `afterReleaseCommit`, or `beforeTag` hooks run. If a hook
 in those slots rewrites the tag name via session settings, the preflight would
 evaluate the stale pre-hook name and could spuriously abort when the post-hook
@@ -143,10 +144,20 @@ releaseIOMonorepoHooksBeforeTag += MonorepoProjectHookIO
   .copy(mayChangeTagSettings = true)
 ```
 
-The lifecycle then skips the early preflight for that release, deferring the
-conflict check to `tag-releases`. Leave the flag at its default `false` for
-hooks that only log, sign, update changelogs, etc. — preflight remains active
-and catches conflicts before any version write or release commit lands.
+The lifecycle then skips the early conflict preflight for that release. After all
+`beforeTag` hooks, a late batch guard still resolves the final names, validates each
+against the active VCS's tag-naming rules, and requires every selected project to have
+a unique tag before the first tag is created; the per-project conflict check then runs
+in `tag-releases`. Leave the flag at its default `false` for hooks that only log, sign,
+update changelogs, etc. — preflight remains active and catches conflicts before any
+version write or release commit lands.
+
+`releaseIOMonorepoVcsTagName` must therefore include enough project identity to
+produce exact, case-sensitive unique names across the selected release batch.
+When a conflict decision keeps an existing Git tag, release-io also rechecks the
+exact local tag ref before querying the remote; if that local ref disappeared, the
+release aborts before publish. Custom VCS adapters without exact-ref support retain
+the compatibility commit-level check.
 
 The same flag works on `MonorepoGlobalResourceHookIO` and `MonorepoProjectResourceHookIO`
 — set `mayChangeTagSettings = true` and the resource-aware hook opts out the same way:

@@ -9,12 +9,15 @@ import io.release.ReleaseSharedKeys.releaseIODiagnosticsSnapshotDependencies
 import io.release.ReleaseSharedKeys.releaseIOPublishAction
 import io.release.ScopedKeyLookup
 import io.release.monorepo.MonorepoContext
+import io.release.monorepo.MonorepoContext.PublishIteration
+import io.release.monorepo.MonorepoContext.PublishValidationProbe
 import io.release.monorepo.MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks
 import io.release.monorepo.ProjectReleaseInfo
 import io.release.monorepo.internal.MonorepoStepAliases.ProjectStep
 import io.release.monorepo.internal.steps.MonorepoStepHelpers.*
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.engine.BuiltInStepRole
+import io.release.runtime.engine.LifecycleCompiler.FrozenGateValidation
 import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.sbt.SnapshotDependencyTasks
@@ -38,6 +41,24 @@ private[monorepo] object MonorepoPublishSteps {
 
   private val PublishArtifactsActionName = "publish-artifacts"
 
+  private sealed trait ValidatedPublishDecision
+  private object ValidatedPublishDecision {
+    case object Live                 extends ValidatedPublishDecision
+    case object Eligible             extends ValidatedPublishDecision
+    case object Skipped              extends ValidatedPublishDecision
+    case object UnvalidatedIteration extends ValidatedPublishDecision
+  }
+
+  /** Canonical frozen-hook gate identity and its already-validated decision, when known.
+    * A candidate that exactly matches a probe input resolves through that probe to its
+    * release-overlay entry. Otherwise the candidate is already an entry (or is genuinely
+    * unknown) and remains unchanged.
+    */
+  private final case class FrozenPublishGateSource(
+      iteration: PublishIteration,
+      decision: Option[Boolean]
+  )
+
   /** Publish hooks freeze their validate-time gate decision, so the cache key
     * must ignore mutable project fields like `versions` and `tagName` while
     * still distinguishing cross-build iterations. Stable project identity plus
@@ -52,11 +73,51 @@ private[monorepo] object MonorepoPublishSteps {
     */
   private[monorepo] val publishGateKey: (MonorepoContext, ProjectReleaseInfo) => String =
     (ctx, project) => {
-      val sv = SbtRuntime
-        .extracted(ctx.state)
-        .getOpt(project.ref / Keys.scalaVersion)
-        .getOrElse("")
-      s"${project.ref.project}:$sv"
+      val live = publishIterationForState(ctx.state, project)
+      frozenPublishGateSource(ctx, live).iteration.gateKey
+    }
+
+  /** Execute-time key for after-publish. A successful publish task may return
+    * a state whose live Scala version differs from the attempt whose hook was
+    * validated; the execution batch keeps that attempt identity stable for both
+    * the frozen decision and the publish-outcome narrow.
+    */
+  private[monorepo] val afterPublishGateKey: (MonorepoContext, ProjectReleaseInfo) => String =
+    (ctx, project) => {
+      val outcome = ctx.afterPublishOutcome(publishIterationForState(ctx.state, project))
+      frozenPublishGateSource(ctx, outcome.gateIteration).iteration.gateKey
+    }
+
+  private def publishIterationForState(
+      state: State,
+      project: ProjectReleaseInfo
+  ): PublishIteration =
+    PublishIteration(project.ref, projectScalaVersion(state, project))
+
+  private def projectScalaVersion(
+      state: State,
+      project: ProjectReleaseInfo
+  ): String =
+    SbtRuntime
+      .extracted(state)
+      .getOpt(project.ref / Keys.scalaVersion)
+      .getOrElse("")
+
+  private def frozenPublishGateSource(
+      ctx: MonorepoContext,
+      candidate: PublishIteration
+  ): FrozenPublishGateSource =
+    ctx.publishValidationProbe(candidate) match {
+      case Some(probe) =>
+        FrozenPublishGateSource(
+          iteration = probe.entry,
+          decision = Some(!probe.publishSkipped)
+        )
+      case None        =>
+        FrozenPublishGateSource(
+          iteration = candidate,
+          decision = ctx.validatedPublishGateDecision(candidate)
+        )
     }
 
   private def fallbackToPublishWarning(project: ProjectReleaseInfo): String =
@@ -127,19 +188,231 @@ private[monorepo] object MonorepoPublishSteps {
           )
       }
 
+  /** Resolve the validate-time frozen key and gate decision from the shared
+    * publish probe. The first publish hook or the publish validator creates
+    * the release overlay and evaluates `publish / skip`; later hooks and the
+    * validator reuse the same result.
+    */
+  private[monorepo] def publishGateValidation(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo
+  ): IO[FrozenGateValidation[MonorepoContext]] =
+    resolvePublishValidationProbe(ctx, project).map { case (resolvedCtx, probe) =>
+      FrozenGateValidation(
+        context = resolvedCtx,
+        key = probe.entry.gateKey,
+        decision = !probe.publishSkipped
+      )
+    }
+
+  private[monorepo] def beforePublishGateValidation(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo
+  ): IO[FrozenGateValidation[MonorepoContext]] =
+    publishGateValidation(ctx.resetFinalizedPublishValidation, project)
+
+  /** Validate `after-publish` against the same decision as `before-publish`,
+    * and freeze it under the attempt identity whose validator ran. A checks-disabled
+    * skip task may move Scala A -> B, but a separate B attempt can make a different
+    * decision; keeping the keys attempt-scoped prevents those gates from colliding.
+    *
+    * Sequential compatibility execution may reach this validator after a successful
+    * publish task changed the live Scala identity. In that case, reuse the current
+    * execution batch's successful attempt and its already-validated gate decision;
+    * resolving a probe from the returned live state would create a second, unrelated
+    * gate. Main upfront validation has no current execution outcome and retains the
+    * shared-probe path.
+    */
+  private[monorepo] def afterPublishGateValidation(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo
+  ): IO[FrozenGateValidation[MonorepoContext]] =
+    IO.blocking(publishIterationForState(ctx.state, project)).flatMap { live =>
+      ctx.currentPublishExecutionOutcome(live) match {
+        case Some(outcome) if outcome.succeeded =>
+          val gateSource = frozenPublishGateSource(ctx, outcome.gateIteration)
+          IO.pure(
+            FrozenGateValidation(
+              context = ctx,
+              key = gateSource.iteration.gateKey,
+              decision = gateSource.decision.getOrElse(true)
+            )
+          )
+        case _                                  =>
+          resolvePublishValidationProbe(ctx, project).map { case (resolvedCtx, probe) =>
+            FrozenGateValidation(
+              context = resolvedCtx,
+              key = probe.entry.gateKey,
+              decision = !probe.publishSkipped
+            )
+          }
+      }
+    }
+
   private[monorepo] def shouldRunPublishHooks(
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
   ): IO[Boolean] =
-    if (ctx.skipPublish) IO.pure(false)
-    else
-      // Evaluate the gate against the post-`set-release-version` state so
-      // version-dependent skip patterns (`publish / skip := isSnapshot.value`)
-      // produce the right decision when the frozen-gate cache is populated at
-      // validate time. State is transient — see withReleaseVersionOverlay.
-      MonorepoVersionWorkflow.withReleaseVersionOverlay(ctx) { tempState =>
-        evaluatePublishSkipAt(tempState, project).map { case (_, skipped) => !skipped }
+    publishGateValidation(ctx, project).map(_.decision)
+
+  private def resolvePublishValidationProbe(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo
+  ): IO[(MonorepoContext, PublishValidationProbe)] =
+    preparePublishValidation(ctx).flatMap { preparedCtx =>
+      IO.blocking(publishIterationForState(preparedCtx.state, project)).flatMap { input =>
+        requireExpectedRefreshInput(preparedCtx, project, input) *>
+          (preparedCtx.publishValidationProbe(input) match {
+            case Some(probe) => IO.pure((preparedCtx, probe))
+            case None        => createPublishValidationProbe(preparedCtx, project, input)
+          })
       }
+    }
+
+  private def requireExpectedRefreshInput(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo,
+      current: PublishIteration
+  ): IO[Unit] = {
+    val expected = ctx.publishValidationRefreshInputs(project.ref)
+    if (expected.isEmpty || expected.contains(current)) IO.unit
+    else
+      IO.raiseError(
+        new IllegalStateException(
+          s"$PublishArtifactsActionName: a hook changed scalaVersion for ${project.name} " +
+            s"before publish validation; expected one of " +
+            expected.toSeq.map(_.scalaVersion).sorted.mkString("'", "', '", "'") +
+            s" but found '${current.scalaVersion}'"
+        )
+      )
+  }
+
+  private def createPublishValidationProbe(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo,
+      input: PublishIteration
+  ): IO[(MonorepoContext, PublishValidationProbe)] =
+    MonorepoVersionWorkflow.withReleaseVersionOverlay(ctx) { tempState =>
+      for {
+        entry               <- IO.blocking(publishIterationForState(tempState, project))
+        unvalidatedIteration =
+          ctx.hasValidatedPublishEligibilitySnapshot &&
+            ctx.publishValidationFinalized &&
+            ctx.validatedPublishEligibility(entry).isEmpty
+        skipResult          <-
+          if (
+            unvalidatedIteration || effectiveSkip(ctx) ||
+            ctx.validatedPublishEligibility(entry).contains(false)
+          )
+            IO.pure((tempState, true))
+          else evaluatePublishSkipAt(tempState, project)
+        (afterSkip, skipped) = skipResult
+        _                   <- requireStableValidatedIteration(ctx, project, entry, afterSkip)
+        postSkip            <- IO.blocking(publishIterationForState(afterSkip, project))
+        targetRequired       =
+          ctx.hasValidatedPublishEligibilitySnapshot && !unvalidatedIteration && !skipped
+        probe                = PublishValidationProbe(
+                                 input = input,
+                                 entry = entry,
+                                 postSkip = postSkip,
+                                 publishSkipped = skipped,
+                                 pendingTargetState =
+                                   if (targetRequired) Some(afterSkip) else None,
+                                 targetValidated = !targetRequired
+                               )
+        withProbe            = ctx.recordPublishValidationProbe(probe)
+        resolvedCtx          =
+          if (withProbe.hasValidatedPublishEligibilitySnapshot && !unvalidatedIteration)
+            withProbe.recordValidatedPublishEligibility(entry, eligible = !skipped)
+          else withProbe
+      } yield (resolvedCtx, probe)
+    }
+
+  /** The no-selection-boundary compatibility path validates and executes each
+    * step in sequence. A before-publish hook can therefore change the state
+    * after its gate probe was created but before publish validation consumes
+    * the probe's transient target state. Re-evaluate only that stale eligible
+    * probe against the post-hook state. A now-effective global skip closes the
+    * probe without evaluating the task. The original skip result remains an
+    * upper bound, so this refresh can suppress publishing but cannot enable it;
+    * checks-disabled refreshes remain snapshotless and retain no target state.
+    */
+  private def refreshExecutedPublishPrelude(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo,
+      probe: PublishValidationProbe
+  ): IO[(MonorepoContext, PublishValidationProbe)] =
+    if (!ctx.publishValidationInputNeedsRefresh(probe.input)) IO.pure((ctx, probe))
+    else if (probe.publishSkipped || effectiveSkip(ctx)) {
+      val refreshedProbe = probe.copy(
+        publishSkipped = true,
+        pendingTargetState = None,
+        targetValidated = true
+      )
+      val refreshedCtx   = recordRefreshedPublishProbe(ctx, refreshedProbe)
+      IO.pure((refreshedCtx, refreshedProbe))
+    } else
+      MonorepoVersionWorkflow.withReleaseVersionOverlayPreservingTransientSettings(ctx) {
+        tempState =>
+          for {
+            refreshedEntry           <- IO.blocking(publishIterationForState(tempState, project))
+            _                        <- requireRefreshIdentity(
+                                          project,
+                                          stage = "release overlay",
+                                          expected = probe.entry,
+                                          observed = refreshedEntry
+                                        )
+            skipResult               <- evaluatePublishSkipAt(tempState, project)
+            (afterSkip, freshSkipped) = skipResult
+            refreshedPostSkip        <- IO.blocking(
+                                          publishIterationForState(afterSkip, project)
+                                        )
+            _                        <- requireRefreshIdentity(
+                                          project,
+                                          stage = "publish / skip",
+                                          expected = probe.postSkip,
+                                          observed = refreshedPostSkip
+                                        )
+            effectiveSkipped          = probe.publishSkipped || freshSkipped
+            targetRequired            =
+              ctx.hasValidatedPublishEligibilitySnapshot && !effectiveSkipped
+            refreshedProbe            = probe.copy(
+                                          publishSkipped = effectiveSkipped,
+                                          pendingTargetState =
+                                            if (targetRequired) Some(afterSkip) else None,
+                                          targetValidated = !targetRequired
+                                        )
+            refreshedCtx              = recordRefreshedPublishProbe(ctx, refreshedProbe)
+          } yield (refreshedCtx, refreshedProbe)
+      }
+
+  private def recordRefreshedPublishProbe(
+      ctx: MonorepoContext,
+      probe: PublishValidationProbe
+  ): MonorepoContext = {
+    val recorded = ctx
+      .recordPublishValidationProbe(probe)
+      .markPublishValidationInputRefreshed(probe.input)
+    if (ctx.hasValidatedPublishEligibilitySnapshot)
+      recorded.recordValidatedPublishEligibility(probe.entry, eligible = !probe.publishSkipped)
+    else recorded
+  }
+
+  private def requireRefreshIdentity(
+      project: ProjectReleaseInfo,
+      stage: String,
+      expected: PublishIteration,
+      observed: PublishIteration
+  ): IO[Unit] =
+    if (expected == observed) IO.unit
+    else
+      IO.raiseError(
+        new IllegalStateException(
+          s"$PublishArtifactsActionName: $stage changed scalaVersion for ${project.name} " +
+            s"from '${expected.scalaVersion}' to '${observed.scalaVersion}' while refreshing " +
+            "a validated publish hook source"
+        )
+      )
 
   /** Execute-time variant of [[shouldRunPublishHooks]] for hook-narrow
     * predicates. Evaluates `publish / skip` for the project directly against
@@ -159,7 +432,106 @@ private[monorepo] object MonorepoPublishSteps {
       project: ProjectReleaseInfo
   ): IO[Boolean] =
     if (effectiveSkip(ctx)) IO.pure(false)
-    else evaluatePublishSkipAt(ctx.state, project).map { case (_, skipped) => !skipped }
+    else
+      IO.blocking(publishIterationForState(ctx.state, project)).flatMap { iteration =>
+        if (!validatedPublishAllows(ctx, iteration)) IO.pure(false)
+        else evaluatePublishSkipAt(ctx.state, project).map { case (_, skipped) => !skipped }
+      }
+
+  private[monorepo] def didPublishForAfterHook(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo
+  ): Boolean =
+    ctx
+      .afterPublishOutcome(publishIterationForState(ctx.state, project))
+      .succeeded
+
+  /** Resolve the checks-backed upper bound for the current project/Scala iteration.
+    * Snapshot absence means checks were disabled or a caller executed the step directly,
+    * preserving the existing live behavior. Once a snapshot exists, an exact-key miss is
+    * an iteration introduced after validation and must fail closed.
+    */
+  private def validatedPublishDecision(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo
+  ): ValidatedPublishDecision =
+    validatedPublishDecision(ctx, publishIterationForState(ctx.state, project))
+
+  private def validatedPublishDecision(
+      ctx: MonorepoContext,
+      iteration: PublishIteration
+  ): ValidatedPublishDecision =
+    ctx.validatedPublishEligibility(iteration) match {
+      case Some(true)  => ValidatedPublishDecision.Eligible
+      case Some(false) => ValidatedPublishDecision.Skipped
+      case None        =>
+        if (ctx.hasValidatedPublishEligibilitySnapshot)
+          ValidatedPublishDecision.UnvalidatedIteration
+        else ValidatedPublishDecision.Live
+    }
+
+  private def validatedPublishAllows(
+      ctx: MonorepoContext,
+      iteration: PublishIteration
+  ): Boolean =
+    validatedPublishDecision(ctx, iteration) match {
+      case ValidatedPublishDecision.Live | ValidatedPublishDecision.Eligible                => true
+      case ValidatedPublishDecision.Skipped | ValidatedPublishDecision.UnvalidatedIteration => false
+    }
+
+  private def requireStableValidatedIteration(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo,
+      expected: PublishIteration,
+      state: State
+  ): IO[Unit] =
+    if (!ctx.hasValidatedPublishEligibilitySnapshot) IO.unit
+    else
+      IO.blocking(publishIterationForState(state, project)).flatMap { observed =>
+        if (observed == expected) IO.unit
+        else
+          IO.raiseError(
+            new IllegalStateException(
+              s"$PublishArtifactsActionName: publish / skip changed scalaVersion for " +
+                s"${project.name} from '${expected.scalaVersion}' to " +
+                s"'${observed.scalaVersion}'; checks-enabled publish validation requires " +
+                "a stable project/Scala iteration"
+            )
+          )
+      }
+
+  /** Re-authorize the final publish-task source after release metadata has
+    * been appended. Session rebuilding for hash/tag settings must not move a
+    * checks-enabled iteration away from the source whose publish eligibility
+    * was validated.
+    */
+  private def requireAuthorizedActionIteration(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo,
+      expected: PublishIteration,
+      action: PublishIteration
+  ): IO[Unit] =
+    if (!ctx.hasValidatedPublishEligibilitySnapshot) IO.unit
+    else if (action != expected)
+      IO.raiseError(
+        new IllegalStateException(
+          s"$PublishArtifactsActionName: publish preparation changed scalaVersion for " +
+            s"${project.name} from '${expected.scalaVersion}' to " +
+            s"'${action.scalaVersion}'; checks-enabled publish validation requires " +
+            "a stable project/Scala iteration"
+        )
+      )
+    else
+      validatedPublishDecision(ctx, action) match {
+        case ValidatedPublishDecision.Eligible => IO.unit
+        case _                                 =>
+          IO.raiseError(
+            new IllegalStateException(
+              s"$PublishArtifactsActionName: publish preparation produced an unauthorized " +
+                s"project/Scala iteration for ${project.name} (${action.gateKey})"
+            )
+          )
+      }
 
   /** Execute-path skip evaluation that threads the task's state mutations
     * back through `ctx`. Used by `publishArtifacts.execute` because side
@@ -295,59 +667,148 @@ private[monorepo] object MonorepoPublishSteps {
   private def executePublish(
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
-  ): IO[MonorepoContext] = {
-    // Marking the per-project publish-execution snapshot here ensures
-    // `after-publish` hooks observe a non-empty `publishExecutedKeys` map
-    // even when every project skipped, so the gate distinguishes
-    // "publish step ran" from "publish step never ran".
-    val startedCtx = ctx.markPublishExecutionStarted
-    if (effectiveSkip(startedCtx))
-      logInfo(startedCtx, s"Skipping publish for ${project.name}").as(startedCtx)
-    else
-      // Persistent overlays (release version, hash, tag) live in
-      // `session.rawAppend` from earlier steps via
-      // [[SbtRuntime.appendSessionSettings]], so version-dependent skip
-      // patterns (`publish / skip := isSnapshot.value`) evaluate against the
-      // post-release-version state here without any local overlay.
-      // `withProjectReleaseState` only fills the hash gap if the release
-      // commit was a no-op; it runs after the skip eval so a `true` skip
-      // short-circuits before any optional VCS work.
-      evaluatePublishSkipPropagating(startedCtx, project).flatMap {
-        case (skipCtx, true)  =>
-          logInfo(skipCtx, s"Skipping publish for ${project.name} (publish / skip := true)")
-            .as(skipCtx)
-        case (skipCtx, false) =>
-          withProjectReleaseState(skipCtx, project).flatMap(runProjectPublish(_, project))
-      }
-  }
+  ): IO[MonorepoContext] =
+    IO.blocking(publishIterationForState(ctx.state, project)).flatMap { iteration =>
+      // Marking the entry attempt preserves skipped and cross-build identity.
+      // A successful action's source iteration is recaptured immediately
+      // before that action runs.
+      val startedCtx = ctx.markPublishExecutionStarted.recordPublishAttempt(iteration)
+      if (effectiveSkip(startedCtx))
+        logInfo(startedCtx, s"Skipping publish for ${project.name}").as(startedCtx)
+      else
+        validatedPublishDecision(startedCtx, iteration) match {
+          case ValidatedPublishDecision.Skipped                                  =>
+            logInfo(
+              startedCtx,
+              s"Skipping publish for ${project.name} (validated publish / skip := true)"
+            ).as(startedCtx)
+          case ValidatedPublishDecision.UnvalidatedIteration                     =>
+            logWarn(
+              startedCtx,
+              s"Skipping publish for ${project.name}: the current project/Scala iteration " +
+                "was not covered by checks-enabled publish validation"
+            ).as(startedCtx)
+          case ValidatedPublishDecision.Live | ValidatedPublishDecision.Eligible =>
+            // Persistent overlays (release version, hash, tag) live in
+            // `session.rawAppend` from earlier steps via
+            // [[SbtRuntime.appendSessionSettings]], so version-dependent skip
+            // patterns (`publish / skip := isSnapshot.value`) evaluate against the
+            // post-release-version state here without any local overlay.
+            evaluatePublishSkipPropagating(startedCtx, project).flatMap {
+              case (skipCtx, publishSkipped) =>
+                requireStableValidatedIteration(
+                  startedCtx,
+                  project,
+                  iteration,
+                  skipCtx.state
+                ) *>
+                  (if (publishSkipped)
+                     logInfo(
+                       skipCtx,
+                       s"Skipping publish for ${project.name} (publish / skip := true)"
+                     ).as(skipCtx)
+                   else
+                     for {
+                       actualPostSkip  <- IO.blocking(
+                                            publishIterationForState(skipCtx.state, project)
+                                          )
+                       hookSource       = skipCtx
+                                            .validatedPublishHookSource(iteration)
+                                            .getOrElse(actualPostSkip)
+                       publishCtx      <- withProjectReleaseState(skipCtx, project)
+                       actionIteration <- IO.blocking(
+                                            publishIterationForState(publishCtx.state, project)
+                                          )
+                       _               <- requireAuthorizedActionIteration(
+                                            publishCtx,
+                                            project,
+                                            hookSource,
+                                            actionIteration
+                                          )
+                       result          <- runProjectPublish(
+                                            publishCtx,
+                                            project,
+                                            iteration,
+                                            actionIteration,
+                                            hookSource
+                                          )
+                     } yield result)
+            }
+        }
+    }
 
   private def validatePublish(
       ctx: MonorepoContext,
       project: ProjectReleaseInfo
+  ): IO[MonorepoContext] = {
+    val batchCtx =
+      if (ctx.publishValidationBatchOpen) ctx
+      else ctx.resetFinalizedPublishValidation
+    preparePublishValidation(batchCtx)
+      .flatMap { preparedCtx =>
+        val refreshPending = preparedCtx.publishValidationRefreshInputs(project.ref).nonEmpty
+        if (
+          !refreshPending &&
+          (effectiveSkip(preparedCtx) || !preparedCtx.hasValidatedPublishEligibilitySnapshot)
+        )
+          IO.pure(preparedCtx)
+        else
+          resolvePublishValidationProbe(preparedCtx, project).flatMap { case (probedCtx, probe) =>
+            refreshExecutedPublishPrelude(probedCtx, project, probe).flatMap {
+              case (refreshedCtx, refreshedProbe) =>
+                if (refreshedProbe.targetValidated) IO.pure(refreshedCtx)
+                else validatePublishTargetForProject(refreshedCtx, project, refreshedProbe)
+            }
+          }
+      }
+      .map { validatedCtx =>
+        if (validatedCtx.publishValidationBatchOpen) validatedCtx
+        else validatedCtx.finalizePublishValidation
+      }
+  }
+
+  /** Establish the run-level publish validation boundary before per-project
+    * traversal begins. The explicit empty snapshot is essential when setup
+    * hooks leave zero projects for validation: a project introduced by a later
+    * execute hook must still fail closed. Snapshot absence remains reserved for
+    * checks-disabled and direct execute paths. An open sequential refresh batch
+    * preserves only the probes it marked as pending so post-hook validation can
+    * narrow their decisions against the updated state.
+    */
+  private[monorepo] def preparePublishValidation(
+      ctx: MonorepoContext
   ): IO[MonorepoContext] = {
     // Capture the validate-time `skipPublish` decision into context metadata
     // so execute replays the same decision instead of re-reading the live
     // field. Closes the asymmetry where a hook running after validation but
     // before publish could flip `skipPublish` from `true` to `false` and
     // bypass the publishTo / `publish / skip` checks skipped here.
-    // `freezePublishSkip` is idempotent, so when validate runs once per
-    // project the first call wins for the run.
+    // `freezePublishSkip` is idempotent, so the step-boundary preparation wins
+    // for the run and direct per-project validation preserves the same contract.
     val frozenCtx = ctx.freezePublishSkip(ctx.skipPublish)
-    if (effectiveSkip(frozenCtx)) IO.pure(frozenCtx)
+    if (frozenCtx.hasValidatedPublishEligibilitySnapshot) IO.pure(frozenCtx)
     else
-      publishChecksEnabled(frozenCtx).flatMap {
-        case false => IO.pure(frozenCtx)
-        case true  => validatePublishTargetForProject(frozenCtx, project).as(frozenCtx)
+      publishChecksEnabled(frozenCtx).map {
+        case false => frozenCtx
+        case true  =>
+          frozenCtx.initializeValidatedPublishEligibilitySnapshot(
+            preserveRefreshProbes = frozenCtx.hasPendingPublishValidationRefreshInputs
+          )
       }
   }
 
   /** Resolve and run the publish task for a single project. Falls back to
     * `publish` with a warning when `releaseIOPublishAction` is not registered
-    * for the project's scope.
+    * for the project's scope. The task-returned Scala identity is captured
+    * before cross-build restore so after-publish attribution can match only
+    * identities produced by the successful attempt.
     */
   private def runProjectPublish(
       ctx: MonorepoContext,
-      project: ProjectReleaseInfo
+      project: ProjectReleaseInfo,
+      attemptIteration: PublishIteration,
+      actionIteration: PublishIteration,
+      hookSource: PublishIteration
   ): IO[MonorepoContext] = {
     val publishStep =
       if (ScopedKeyLookup.containsScopedKey(ctx.state, project.ref / releaseIOPublishAction))
@@ -355,37 +816,51 @@ private[monorepo] object MonorepoPublishSteps {
       else
         logWarn(ctx, fallbackToPublishWarning(project)) *>
           runProjectTask(ctx, project.ref / publish)
-    publishStep.map(_.recordPublishExecuted(publishGateKey(ctx, project)))
+    publishStep.flatMap { publishedCtx =>
+      IO.blocking(publishIterationForState(publishedCtx.state, project)).map {
+        taskReturnedIteration =>
+          publishedCtx.recordPublishSucceeded(
+            attemptIteration,
+            actionIteration,
+            hookSource,
+            taskReturnedIteration
+          )
+      }
+    }
   }
 
   private def publishChecksEnabled(ctx: MonorepoContext): IO[Boolean] =
     IO.blocking(Project.extract(ctx.state).get(releaseIOMonorepoPublishChecks))
 
-  /** Validate-time publishTo + skip checks for one project. Evaluates skip +
-    * publishTo against a transient overlay state so version-dependent
-    * `publish / skip := isSnapshot.value` resolves against the
-    * post-`set-release-version` value. State mutations from the skip task
-    * are threaded into the publishTo evaluation (important for builds whose
-    * `publish / skip` is a task that installs resolver settings via session
-    * updates). The overlay state and any task-induced mutations are
-    * discarded once the body returns, so `inquireVersions.execute` later
-    * sees the original snapshot state for its version-task evaluation.
+  /** Validate `publishTo` using the post-skip transient state retained by the
+    * shared probe. This preserves skip-task session mutations needed by the
+    * target while evaluating both tasks only once. The state payload is
+    * cleared immediately after successful target validation and never becomes
+    * the live release state.
     */
   private def validatePublishTargetForProject(
       ctx: MonorepoContext,
-      project: ProjectReleaseInfo
-  ): IO[Unit] =
-    MonorepoVersionWorkflow.withReleaseVersionOverlay(ctx) { tempState =>
-      for {
-        skipResult                      <- evaluatePublishSkipAt(tempState, project)
-        (afterSkipState, publishSkipped) = skipResult
-        publishTarget                   <-
-          if (publishSkipped) IO.pure(Option.empty[Resolver])
-          else
-            evaluatePublishTargetAt(afterSkipState, project).map { case (_, target) => target }
-        _                               <- PublishValidation.requirePublishTarget(
-                                             project.ref.project
-                                           )(publishSkipped, publishTarget.isEmpty)
-      } yield ()
+      project: ProjectReleaseInfo,
+      probe: PublishValidationProbe
+  ): IO[MonorepoContext] =
+    probe.pendingTargetState match {
+      case Some(afterSkipState) =>
+        for {
+          publishTarget <- evaluatePublishTargetAt(afterSkipState, project).map {
+                             case (_, target) =>
+                               target
+                           }
+          _             <- PublishValidation.requirePublishTarget(project.ref.project)(
+                             publishSkipped = false,
+                             publishToEmpty = publishTarget.isEmpty
+                           )
+        } yield ctx.completePublishTargetValidation(probe.input)
+      case None                 =>
+        IO.raiseError(
+          new IllegalStateException(
+            s"$PublishArtifactsActionName: pending publish target state missing for " +
+              s"${project.name} (${probe.input.gateKey})"
+          )
+        )
     }
 }

@@ -7,6 +7,18 @@ import io.release.runtime.TrackedContextHandle
 
 private[release] object LifecycleCompiler {
 
+  /** Frozen-gate validation result whose updated context, key, and decision
+    * were resolved together. The context is threaded forward even when the
+    * decision is false and hook validation is skipped.
+    */
+  final case class FrozenGateValidation[C](context: C, key: String, decision: Boolean)
+
+  private final case class ResolvedFrozenGate[Args](
+      args: Args,
+      key: String,
+      decision: Boolean
+  )
+
   final case class Phase[Config, C, I](
       phaseName: Option[String],
       rawSteps: Seq[ProcessStep[C, I]],
@@ -86,12 +98,20 @@ private[release] object LifecycleCompiler {
     *   iteration. Must use a stable project identifier (e.g. `ProjectRef`) rather than
     *   the full item, since item fields like `versions` and `tagName` change between
     *   phases. When `None`, the gate is streaming (re-evaluated each call).
+    * @param freezeGateValidation optional effectful override that resolves an updated context,
+    *   cache key, and gate decision together during validation. The updated context is returned
+    *   even for a false decision. Execute still reads the key produced by `freezeGateKey`. When
+    *   absent, validation evaluates `freezeGateKey` and `gate` separately as before.
     * @param narrowExecute optional execute-time predicate AND'd with `gate` (or, when
     *   `freezeGateKey` is set, with the cached validate-time gate decision). Lets a phase
     *   use the validate-time gate as an upper bound while further gating execution on a
     *   runtime signal the validate phase cannot observe (e.g. "did the publish task
     *   actually run?", "did the push actually go through?"). Validation is unaffected,
     *   preserving the validate-before-execute contract.
+    * @param narrowOnMissingFrozenGate when `true` and `freezeGateKey` is set, an absent cached
+    *   decision may be suppressed only when `narrowExecute` returns `false`. Cached `false`
+    *   decisions skip without evaluating the narrow; cached `true` decisions evaluate the
+    *   narrow normally. If the narrow returns `true`, the missing-decision invariant still fails.
     */
   def perItemHookPhase[Config, C, I, Hook](
       phase: String,
@@ -103,8 +123,10 @@ private[release] object LifecycleCompiler {
       validateOf: Hook => (C, I) => IO[Unit],
       crossBuild: Boolean = false,
       freezeGateKey: Option[(C, I) => String] = None,
+      freezeGateValidation: Option[(C, I) => IO[FrozenGateValidation[C]]] = None,
       enabled: Config => Boolean = (_: Config) => true,
-      narrowExecute: Option[(C, I) => IO[Boolean]] = None
+      narrowExecute: Option[(C, I) => IO[Boolean]] = None,
+      narrowOnMissingFrozenGate: Boolean = false
   ): Phase[Config, C, I] = {
     val trackedExecuteOf =
       executeTrackedOf.getOrElse((hook: Hook) => TrackedContextHandle.liftPerItem(executeOf(hook)))
@@ -118,7 +140,9 @@ private[release] object LifecycleCompiler {
             hooks = resolveHooks(config),
             gate = gate,
             gateMode = freezeGateKey,
-            narrowExecute = narrowExecute
+            validateGate = freezeGateValidation,
+            narrowExecute = narrowExecute,
+            narrowOnMissingFrozenGate = narrowOnMissingFrozenGate
           )(
             nameOf = nameOf,
             executeOf = executeOf,
@@ -252,7 +276,9 @@ private[release] object LifecycleCompiler {
       hooks: Seq[Hook],
       gate: (C, I) => IO[Boolean],
       gateMode: Option[(C, I) => String],
-      narrowExecute: Option[(C, I) => IO[Boolean]]
+      validateGate: Option[(C, I) => IO[FrozenGateValidation[C]]],
+      narrowExecute: Option[(C, I) => IO[Boolean]],
+      narrowOnMissingFrozenGate: Boolean
   )(
       nameOf: Hook => String,
       executeOf: Hook => (C, I) => IO[C],
@@ -285,10 +311,27 @@ private[release] object LifecycleCompiler {
         case Some(stableGateKey) =>
           val narrowedExecute        = applyNarrow(executeOf(hook))
           val narrowedExecuteTracked = applyNarrowTracked(executeTrackedOf(hook))
+          val narrowIfMissing        =
+            if (narrowOnMissingFrozenGate) narrowExecute.map { narrow => (args: (C, I)) =>
+              narrow(args._1, args._2)
+            }
+            else None
 
           frozenGateFunctions[(C, I), C](
             gate = { case (c, i) => gate(c, i) },
             gateKey = { case (c, i) => stableGateKey(c, i) },
+            validateGate = validateGate.map { resolve =>
+              { case (c, i) =>
+                resolve(c, i).map { resolved =>
+                  ResolvedFrozenGate(
+                    args = (resolved.context, i),
+                    key = resolved.key,
+                    decision = resolved.decision
+                  )
+                }
+              }
+            },
+            narrowIfMissing = narrowIfMissing,
             execute = { case (c, i) => narrowedExecute(c, i) },
             executeTracked = (handle, args) => narrowedExecuteTracked(handle, args._2),
             validate = { case (c, i) =>
@@ -353,6 +396,8 @@ private[release] object LifecycleCompiler {
   private def frozenGateFunctions[Args, C](
       gate: Args => IO[Boolean],
       gateKey: Args => String,
+      validateGate: Option[Args => IO[ResolvedFrozenGate[Args]]] = None,
+      narrowIfMissing: Option[Args => IO[Boolean]] = None,
       execute: Args => IO[C],
       executeTracked: (TrackedContextHandle[C], Args) => IO[Unit],
       validate: Args => IO[C],
@@ -363,6 +408,7 @@ private[release] object LifecycleCompiler {
         frozenGateRun(
           cached,
           gateKey(args),
+          narrowIfMissing.map(narrow => () => narrow(args)),
           execute(args),
           skip(args)
         )
@@ -370,40 +416,61 @@ private[release] object LifecycleCompiler {
         frozenGateRunTracked(
           cached,
           gateKey(args),
+          narrowIfMissing.map(narrow => () => narrow(args)),
           executeTracked(handle, args)
         )
       val valFn: Args => IO[C] = args =>
-        frozenGateValidate(
-          cached,
-          gateKey(args),
-          gate(args),
-          validate(args),
-          skip(args)
-        )
+        validateGate
+          .fold(
+            IO(gateKey(args))
+              .flatMap(key => gate(args).map(decision => ResolvedFrozenGate(args, key, decision)))
+          )(_(args))
+          .flatMap { resolved =>
+            frozenGateValidate(
+              cached,
+              resolved.key,
+              IO.pure(resolved.decision),
+              validate(resolved.args),
+              skip(resolved.args)
+            )
+          }
       (exec, execTracked, valFn)
     }
 
-  private def requireFrozenDecision(
+  private def resolveFrozenDecision(
       cached: Ref[IO, Map[String, Boolean]],
-      key: String
+      key: String,
+      narrowIfMissing: Option[() => IO[Boolean]]
   ): IO[Boolean] =
     cached.get.map(_.get(key)).flatMap {
       case Some(decision) => IO.pure(decision)
       case None           =>
-        IO.raiseError(
-          new IllegalStateException(
-            s"Frozen gate decision missing for key '$key'; validate must run before execute when freezeGateKey is set"
-          )
-        )
+        narrowIfMissing match {
+          case Some(narrow) =>
+            narrow().flatMap {
+              case false => IO.pure(false)
+              case true  => missingFrozenDecision(key)
+            }
+          case None         => missingFrozenDecision(key)
+        }
     }
+
+  private def missingFrozenDecision(key: String): IO[Boolean] =
+    IO.raiseError(
+      new IllegalStateException(
+        s"Frozen gate decision missing for key '$key'; validate must run before execute when freezeGateKey is set"
+      )
+    )
 
   private def frozenGateRun[C](
       cached: Ref[IO, Map[String, Boolean]],
       key: String,
-      executeIfTrue: IO[C],
-      skip: IO[C]
+      narrowIfMissing: Option[() => IO[Boolean]],
+      executeIfTrue: => IO[C],
+      skip: => IO[C]
   ): IO[C] =
-    requireFrozenDecision(cached, key).flatMap(if (_) executeIfTrue else skip)
+    resolveFrozenDecision(cached, key, narrowIfMissing)
+      .flatMap(if (_) executeIfTrue else skip)
 
   private def frozenGateValidate[C](
       cached: Ref[IO, Map[String, Boolean]],
@@ -422,7 +489,9 @@ private[release] object LifecycleCompiler {
   private def frozenGateRunTracked(
       cached: Ref[IO, Map[String, Boolean]],
       key: String,
-      executeIfTrue: IO[Unit]
+      narrowIfMissing: Option[() => IO[Boolean]],
+      executeIfTrue: => IO[Unit]
   ): IO[Unit] =
-    requireFrozenDecision(cached, key).flatMap(if (_) executeIfTrue else IO.unit)
+    resolveFrozenDecision(cached, key, narrowIfMissing)
+      .flatMap(if (_) executeIfTrue else IO.unit)
 }

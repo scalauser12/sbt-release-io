@@ -10,15 +10,17 @@
 | 4 | `detect-or-select-projects` | Global | Run change detection or use explicit CLI selection |
 | 5 | `check-snapshot-dependencies` | PerProject | Validation-only step that checks SNAPSHOT dependencies and aborts only if the operator or policy declines to continue (checks every Scala version in `crossScalaVersions` when cross-build is enabled) |
 | 6 | `inquire-versions` | PerProject | Read current version, compute or prompt for release + next |
-| 7 | `run-clean` | PerProject | Clean selected project outputs (see note below) |
-| 8 | `run-tests` | PerProject | Run the selected project's `test` task (cross-build enabled, skippable) |
-| 9 | `set-release-version` | PerProject | Write release version to `version.sbt` |
-| 10 | `commit-release-versions` | Global | Single commit staging all version files |
-| 11 | `tag-releases` | PerProject | Create per-project release tags |
-| 12 | `publish-artifacts` | PerProject | Publish the selected project's artifacts (cross-build enabled, skippable) |
-| 13 | `set-next-version` | PerProject | Write next snapshot version to `version.sbt` |
-| 14 | `commit-next-versions` | Global | Single commit staging all version files |
-| 15 | `push-changes` | Global | Push branch + tags to tracking remote |
+| 7 | `tag-preflight` | Global | Validate the initial tag-name batch and probe local/remote conflicts before release writes |
+| 8 | `run-clean` | PerProject | Clean selected project outputs (see note below) |
+| 9 | `run-tests` | PerProject | Run the selected project's `test` task (cross-build enabled, skippable) |
+| 10 | `set-release-version` | PerProject | Write release version to `version.sbt` |
+| 11 | `commit-release-versions` | Global | Single commit staging all version files |
+| 12 | `plan-tag-names` | Global | Freeze and validate the post-hook tag-name batch before the first tag operation |
+| 13 | `tag-releases` | PerProject | Create per-project release tags |
+| 14 | `publish-artifacts` | PerProject | Publish the selected project's artifacts (cross-build enabled, skippable) |
+| 15 | `set-next-version` | PerProject | Write next snapshot version to `version.sbt` |
+| 16 | `commit-next-versions` | Global | Single commit staging all version files |
+| 17 | `push-changes` | Global | Push branch + tags to tracking remote |
 
 **Global** steps run once. **PerProject** steps run once per selected project in topological order. Only selected projects participate — child projects that weren't selected or discovered by change detection are skipped.
 
@@ -33,6 +35,13 @@
 3. **Main execution**: Remaining steps run sequentially, threading `MonorepoContext` through. Task-level failures are detected between steps.
 
 Author implication: if a custom hook needs strict validate -> execute ordering relative to later checks, place it in the setup segment or fold the dependent check and action into the same hook.
+
+Custom workflows that omit `detect-or-select-projects` retain the legacy
+validate-then-execute-per-step fallback. In that mode, publish validation
+refreshes an eligible probe after an executed `beforePublish` hook so
+hook-installed `publishTo` and `publish / skip` settings are observed. The
+original skip decision remains an upper bound, and a skipped probe is never
+re-enabled or re-evaluated.
 
 ### Per-project failure isolation
 

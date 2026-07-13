@@ -5,6 +5,7 @@ import io.release.VcsOps
 import io.release.monorepo.*
 import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
 import io.release.monorepo.internal.steps.MonorepoCrossBuild
+import io.release.monorepo.internal.steps.MonorepoPublishSteps
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.TrackedContextHandle
 import io.release.runtime.engine.BuiltInStepRole
@@ -17,6 +18,20 @@ import io.release.runtime.workflow.DecisionResolver
 private[monorepo] object MonorepoComposer {
 
   private val LogPrefix = ReleaseLogPrefixes.Monorepo
+
+  private[monorepo] sealed trait PublishValidationMode {
+    def refreshExecutedPrelude: Boolean
+  }
+
+  private[monorepo] object PublishValidationMode {
+    case object PreservePrelude extends PublishValidationMode {
+      override val refreshExecutedPrelude: Boolean = false
+    }
+
+    case object RefreshExecutedPrelude extends PublishValidationMode {
+      override val refreshExecutedPrelude: Boolean = true
+    }
+  }
 
   /** Step name that divides the release process into two segments:
     *  - '''Setup''' (through post-selection hooks): steps run sequentially, each validated then
@@ -42,7 +57,8 @@ private[monorepo] object MonorepoComposer {
         preSetupCtx  <- runSequentialValidateThenExecute(
                           plan.preSelectionSetupSteps,
                           initialCtx,
-                          crossBuild
+                          crossBuild,
+                          PublishValidationMode.PreservePrelude
                         )
         preparedCtx  <- haltIfFailed(preSetupCtx) { ctx =>
                           preparePushIfDecisionAllows(ctx, plan.mainSteps)
@@ -51,7 +67,8 @@ private[monorepo] object MonorepoComposer {
                           runSequentialValidateThenExecute(
                             plan.postSelectionSetupSteps,
                             ctx,
-                            crossBuild
+                            crossBuild,
+                            PublishValidationMode.PreservePrelude
                           )
                         }
         finalCtx     <- haltIfFailed(postSetupCtx) { ctx =>
@@ -61,7 +78,14 @@ private[monorepo] object MonorepoComposer {
       } yield finalCtx
     else
       preparePushIfDecisionAllows(initialCtx, steps)
-        .flatMap(runSequentialValidateThenExecute(steps, _, crossBuild))
+        .flatMap(
+          runSequentialValidateThenExecute(
+            steps,
+            _,
+            crossBuild,
+            PublishValidationMode.RefreshExecutedPrelude
+          )
+        )
   }
 
   private def haltIfFailed(ctx: MonorepoContext)(
@@ -109,29 +133,32 @@ private[monorepo] object MonorepoComposer {
   ): IO[MonorepoContext] =
     ExecutionEngine.runMainSegment(
       logPrefix = LogPrefix,
-      steps = preparedSteps(steps, crossBuild),
+      steps = preparedSteps(steps, crossBuild, PublishValidationMode.PreservePrelude),
       startCtx = startCtx
     )
 
   private def runSequentialValidateThenExecute(
       steps: Seq[AnyStep],
       startCtx: MonorepoContext,
-      crossBuild: Boolean
+      crossBuild: Boolean,
+      publishValidationMode: PublishValidationMode
   ): IO[MonorepoContext] =
     ExecutionEngine.runSequentialValidateThenExecute(
-      steps = preparedSteps(steps, crossBuild),
+      steps = preparedSteps(steps, crossBuild, publishValidationMode),
       startCtx = startCtx
     )
 
   private[monorepo] def preparedSteps(
       steps: Seq[AnyStep],
-      crossBuild: Boolean
+      crossBuild: Boolean,
+      publishValidationMode: PublishValidationMode = PublishValidationMode.PreservePrelude
   ): Seq[ExecutionEngine.PreparedStep[MonorepoContext]] =
-    steps.map(asPreparedStep(_, crossBuild))
+    steps.map(asPreparedStep(_, crossBuild, publishValidationMode))
 
   private def asPreparedStep(
       step: AnyStep,
-      crossBuild: Boolean
+      crossBuild: Boolean,
+      publishValidationMode: PublishValidationMode
   ): ExecutionEngine.PreparedStep[MonorepoContext] =
     ProcessStep.fold(step)(
       single =>
@@ -155,20 +182,43 @@ private[monorepo] object MonorepoComposer {
         ExecutionEngine.PreparedStep(
           name = typed.name,
           validate = ctx =>
-            MonorepoCrossBuild.validatePerProjectWithCrossBuild(
-              ctx,
-              typed.validate,
-              crossBuild,
-              typed.enableCrossBuild
-            ),
-          executeTracked = ExecutionEngine.withTrackedErrorRecovery(LogPrefix)(handle =>
-            MonorepoCrossBuild.runPerProjectWithCrossBuildTracked(
-              handle,
-              loggedTracked,
-              crossBuild,
-              typed.enableCrossBuild
-            )
-          )
+            if (typed.hasRole(BuiltInStepRole.PublishArtifacts))
+              IO
+                .pure(
+                  ctx.beginPublishValidationBatch(
+                    refreshExecutedPrelude = publishValidationMode.refreshExecutedPrelude
+                  )
+                )
+                .flatMap(MonorepoPublishSteps.preparePublishValidation)
+                .flatMap { preparedCtx =>
+                  MonorepoCrossBuild.validatePerProjectWithCrossBuild(
+                    preparedCtx,
+                    typed.validate,
+                    crossBuild,
+                    typed.enableCrossBuild
+                  )
+                }
+                .map(_.finalizePublishValidation)
+            else
+              MonorepoCrossBuild.validatePerProjectWithCrossBuild(
+                ctx,
+                typed.validate,
+                crossBuild,
+                typed.enableCrossBuild
+              ),
+          executeTracked = ExecutionEngine.withTrackedErrorRecovery(LogPrefix) { handle =>
+            val prepareExecution =
+              if (typed.hasRole(BuiltInStepRole.PublishArtifacts))
+                handle.update(ctx => IO.pure(ctx.beginPublishExecutionBatch)).void
+              else IO.unit
+            prepareExecution *>
+              MonorepoCrossBuild.runPerProjectWithCrossBuildTracked(
+                handle,
+                loggedTracked,
+                crossBuild,
+                typed.enableCrossBuild
+              )
+          }
         )
       }
     )

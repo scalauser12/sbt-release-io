@@ -14,11 +14,11 @@ $ exec git remote add origin remotes/origin.git
 $ exec git config remote.origin.tagOpt --no-tags
 $ exec git push -u origin main
 
-# Push core/v0.1.0 to the remote at a DIFFERENT commit, via a separate clone.
-$ exec git clone remotes/origin.git temp-clone
+# Create the remote annotated tag at the SAME commit, but with different annotation
+# metadata so its tag-object ID differs from the local object created below.
+$ exec git clone --branch main remotes/origin.git temp-clone
 $ exec git -C temp-clone config user.email "other@example.com"
 $ exec git -C temp-clone config user.name "Other Author"
-$ exec git -C temp-clone commit --allow-empty -m "divergent commit"
 $ exec git -C temp-clone tag -a core/v0.1.0 -m "remote tag"
 $ exec git -C temp-clone push origin core/v0.1.0
 
@@ -27,9 +27,11 @@ $ exec git -C temp-clone push origin core/v0.1.0
 # tag MATCHES the release commit — keep is accepted locally.
 $ exec git tag -a core/v0.1.0 -m "local tag"
 $ exec git rev-parse --verify refs/tags/core/v0.1.0
+$ exec sh -c 'test "$(git rev-parse refs/tags/core/v0.1.0)" != "$(git ls-remote origin refs/tags/core/v0.1.0 | cut -f1)"'
+$ exec sh -c 'test "$(git rev-parse refs/tags/core/v0.1.0^{commit})" = "$(git ls-remote origin refs/tags/core/v0.1.0^{} | cut -f1)"'
 
-# Keep the existing tag (k). Local matches, but the remote holds core/v0.1.0 at a
-# different commit, so the hash-aware keep probe MUST abort at tag-preflight —
+# Keep the existing tag (k). Local matches the release commit and the remote tag peels
+# to that same commit, but the exact tag objects differ. The keep probe MUST abort —
 # before set-release-versions, the release commit, or publish.
 -> releaseIOMonorepo core with-defaults default-tag-exists-answer k release-version core=0.1.0 next-version core=0.2.0-SNAPSHOT
 

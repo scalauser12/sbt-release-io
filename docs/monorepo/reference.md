@@ -110,6 +110,11 @@ publish in different ways — see [Disabling publish: policy vs behavior](config
 | ------- | ---- | ------- | ----------- |
 | `releaseIOMonorepoPublishChecks` | `Boolean` | `true` | Validate `publishTo` / `publish / skip` before publish |
 
+When publish checks are enabled, a validation-time `publish / skip := true` is
+authoritative for that project and Scala version. Later state may suppress an
+eligible publish, but it cannot turn a validated skip back into a publish; the
+`beforePublish` and `afterPublish` hook gates use the same upper bound.
+
 ## Change detection settings
 
 | Setting | Type | Default | Description |

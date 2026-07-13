@@ -9,15 +9,19 @@ $ exec git commit -m "Initial commit"
 $ exec git tag root/v0.1.0
 $ exec git tag sub/v0.1.0
 
-# Modify ONLY the sub directory (add a file and commit)
+# Modify the participating sub directory and the loaded-but-nonparticipating
+# ignored live baseDirectory. Neither nested change may leak into the root diff.
 $ exec mkdir -p sub/src
 $ exec touch sub/src/Foo.scala
-$ exec git add sub/src/Foo.scala
-$ exec git commit -m "Add source file to sub"
+$ exec mkdir -p ignored-live/src
+$ exec touch ignored-live/src/Ignored.scala
+$ exec git add sub/src/Foo.scala ignored-live/src/Ignored.scala
+$ exec git commit -m "Add nested project sources"
 
 # Release with NO explicit project selection — relies on change detection.
 # Sub should be detected as changed. Root should NOT be detected
-# (the change is under sub/, which must be excluded from root's diff scope).
+# (the changes are under loaded child projects, including an omitted participant
+# whose live baseDirectory differs from its declared Project.base).
 > releaseIOMonorepo with-defaults release-version sub=0.2.0 next-version sub=0.3.0-SNAPSHOT
 
 # Verify only sub was released and root is unchanged

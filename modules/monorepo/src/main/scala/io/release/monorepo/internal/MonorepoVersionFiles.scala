@@ -38,33 +38,30 @@ private[monorepo] object MonorepoVersionFiles {
 
   // ── Late-bound versioning settings lift ─────────────────────────────
 
-  /** Promote any currently-resolvable late-bound monorepo version-file
-    * resolver triple from `structure.settings` into `session.rawAppend` so
-    * it survives later structure rebuilds.
+  /** Promote late-bound monorepo version-file resolver definitions from
+    * `structure.settings` into `session.rawAppend` so they survive later
+    * structure rebuilds.
     *
     * Hooks that install the resolver triple via `Extracted.appendWithSession`
     * place the settings only in `structure.settings`. Subsequent
     * `SbtRuntime.appendSessionSettings` calls (in version-write, commit,
     * and tag steps) rebuild the structure from `session.mergeSettings`,
     * which excludes those overlays. Lifting the triple before each such
-    * call promotes it into `session.rawAppend`, where it contributes to
-    * every future `mergeSettings` and survives every later rebuild.
+    * call promotes the actual transient setting definitions, plus any
+    * transient definitions they depend on, into `session.rawAppend`. Keeping
+    * the definitions rather than their resolved values preserves `.value`
+    * dependencies across future rebuilds.
     *
-    * No-op when any leg of the triple is undefined or when the resolver
-    * already lives in `rawAppend` at the same value (idempotent: identical
-    * entries appended to `rawAppend` resolve identically via last-wins).
+    * A repeated call is a true no-op: once promoted, the definitions are part
+    * of `session.mergeSettings` and no longer appear in the transient suffix.
     */
-  def liftLateBoundVersioningSettings(state: State): State = {
-    val extracted = SbtRuntime.extracted(state)
-    val triple    = for {
-      versionFile         <- extracted.getOpt(releaseIOMonorepoVersioningFile)
-      readVersion         <- extracted.getOpt(releaseIOMonorepoVersioningReadVersion)
-      versionFileContents <- extracted.getOpt(releaseIOMonorepoVersioningFileContents)
-    } yield Seq[Setting[?]](
-      releaseIOMonorepoVersioningFile         := versionFile,
-      releaseIOMonorepoVersioningReadVersion  := readVersion,
-      releaseIOMonorepoVersioningFileContents := versionFileContents
+  def liftLateBoundVersioningSettings(state: State): State =
+    SbtRuntime.promoteTransientSettingsByKey(
+      state,
+      Seq(
+        releaseIOMonorepoVersioningFile.key,
+        releaseIOMonorepoVersioningReadVersion.key,
+        releaseIOMonorepoVersioningFileContents.key
+      )
     )
-    triple.fold(state)(SbtRuntime.appendSessionSettings(state, _))
-  }
 }

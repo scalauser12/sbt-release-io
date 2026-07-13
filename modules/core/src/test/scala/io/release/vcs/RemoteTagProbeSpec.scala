@@ -6,6 +6,7 @@ import cats.effect.Resource
 import io.release.ReleaseContext
 import io.release.ReleasePluginIO
 import io.release.ReleaseTestSupport
+import io.release.TestSupport
 import io.release.VcsOps
 import io.release.core.internal.CoreExecutionState
 import io.release.core.internal.CoreReleasePlan
@@ -243,25 +244,99 @@ class RemoteTagProbeSpec extends CatsEffectSuite {
 
   private val KeptCommit  = "1111111111111111111111111111111111111111"
   private val OtherCommit = "2222222222222222222222222222222222222222"
+  private val KeptRef     = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  private val OtherRef    = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
-  test("probeForKeep - skips when pushConfigured = false; no Vcs calls") {
+  test("probeForKeep - validates present and unsupported refs before skipping a disabled push") {
+    def verify(localRef: LocalTagRef): IO[Unit] =
+      runKeepProbe(
+        buildVcs = StubVcs.recording(
+          _,
+          localTagRefValue = Some(localRef)
+        ),
+        pushConfigured = false
+      ) { (result, calls) =>
+        assert(result.isRight, s"expected success, got: $result")
+        assertEquals(calls, List("localTagRef(v0.1.0)"))
+      }
+
+    verify(LocalTagRef.At(KeptRef)).flatMap(_ => verify(LocalTagRef.Unsupported))
+  }
+
+  test("probeForKeep - validates present and unsupported refs before skipping a declined push") {
+    def verify(localRef: LocalTagRef): IO[Unit] =
+      runKeepProbe(
+        buildVcs = StubVcs.recording(
+          _,
+          localTagRefValue = Some(localRef)
+        ),
+        pushConfigured = true,
+        pushAnswer = Some(false)
+      ) { (result, calls) =>
+        assert(result.isRight, s"expected success, got: $result")
+        assertEquals(calls, List("localTagRef(v0.1.0)"))
+      }
+
+    verify(LocalTagRef.At(KeptRef)).flatMap(_ => verify(LocalTagRef.Unsupported))
+  }
+
+  test("probeForKeep - validates present and unsupported refs before the no-upstream gate") {
+    def verify(localRef: LocalTagRef): IO[Unit] =
+      runKeepProbe(
+        buildVcs = StubVcs.recording(
+          _,
+          hasUpstreamValue = false,
+          localTagRefValue = Some(localRef)
+        ),
+        pushConfigured = true,
+        pushAnswer = Some(true)
+      ) { (result, calls) =>
+        assert(result.isRight, s"expected success, got: $result")
+        assertEquals(calls, List("localTagRef(v0.1.0)", "hasUpstream"))
+      }
+
+    verify(LocalTagRef.At(KeptRef)).flatMap(_ => verify(LocalTagRef.Unsupported))
+  }
+
+  test("probeForKeep - rejects an absent local ref when push is disabled") {
     runKeepProbe(
-      buildVcs = StubVcs.recording,
+      buildVcs = StubVcs.recording(
+        _,
+        localTagRefValue = Some(LocalTagRef.Absent)
+      ),
       pushConfigured = false
     ) { (result, calls) =>
-      assert(result.isRight, s"expected success, got: $result")
-      assertEquals(calls, Nil)
+      assert(result.isLeft, s"expected missing-local-ref failure, got: $result")
+      assertEquals(calls, List("localTagRef(v0.1.0)"))
     }
   }
 
-  test("probeForKeep - exits cleanly when the branch has no upstream; no remote query") {
+  test("probeForKeep - rejects an absent local ref when push is declined") {
     runKeepProbe(
-      buildVcs = StubVcs.recording(_, hasUpstreamValue = false),
+      buildVcs = StubVcs.recording(
+        _,
+        localTagRefValue = Some(LocalTagRef.Absent)
+      ),
+      pushConfigured = true,
+      pushAnswer = Some(false)
+    ) { (result, calls) =>
+      assert(result.isLeft, s"expected missing-local-ref failure, got: $result")
+      assertEquals(calls, List("localTagRef(v0.1.0)"))
+    }
+  }
+
+  test("probeForKeep - rejects an absent local ref before checking for an upstream") {
+    runKeepProbe(
+      buildVcs = StubVcs.recording(
+        _,
+        hasUpstreamValue = false,
+        localTagRefValue = Some(LocalTagRef.Absent)
+      ),
       pushConfigured = true,
       pushAnswer = Some(true)
     ) { (result, calls) =>
-      assert(result.isRight, s"expected success, got: $result")
-      assertEquals(calls, List("hasUpstream"))
+      assert(result.isLeft, s"expected missing-local-ref failure, got: $result")
+      assertEquals(calls, List("localTagRef(v0.1.0)"))
     }
   }
 
@@ -275,7 +350,12 @@ class RemoteTagProbeSpec extends CatsEffectSuite {
       assert(result.isRight, s"expected success, got: $result")
       assertEquals(
         calls,
-        List("hasUpstream", "trackingRemote", "remoteTagCommitWithTimeout(origin,v0.1.0)")
+        List(
+          "localTagRef(v0.1.0)",
+          "hasUpstream",
+          "trackingRemote",
+          "remoteTagCommitWithTimeout(origin,v0.1.0)"
+        )
       )
     }
   }
@@ -294,8 +374,115 @@ class RemoteTagProbeSpec extends CatsEffectSuite {
       assert(result.isRight, s"expected success, got: $result")
       assertEquals(
         calls,
-        List("hasUpstream", "trackingRemote", "remoteTagCommitWithTimeout(origin,v0.1.0)")
+        List(
+          "localTagRef(v0.1.0)",
+          "hasUpstream",
+          "trackingRemote",
+          "remoteTagCommitWithTimeout(origin,v0.1.0)"
+        )
       )
+    }
+  }
+
+  test("probeForKeep - returns unit when the exact local and remote tag refs match") {
+    runKeepProbe(
+      buildVcs = StubVcs.recording(
+        _,
+        hasUpstreamValue = true,
+        tagRefHashValue = Some(Some(KeptRef)),
+        remoteTagRefValue = Some(RemoteTagRef.At(KeptRef))
+      ),
+      pushConfigured = true,
+      pushAnswer = Some(true)
+    ) { (result, calls) =>
+      assert(result.isRight, s"expected success, got: $result")
+      assertEquals(
+        calls,
+        List(
+          "localTagRef(v0.1.0)",
+          "tagRefHash(v0.1.0)",
+          "hasUpstream",
+          "trackingRemote",
+          "remoteTagRefWithTimeout(origin,v0.1.0)"
+        )
+      )
+    }
+  }
+
+  test("probeForKeep - aborts before the remote query when the authoritative local ref is absent") {
+    runKeepProbe(
+      buildVcs = StubVcs.recording(
+        _,
+        hasUpstreamValue = true,
+        localTagRefValue = Some(LocalTagRef.Absent),
+        remoteTagRefValue = Some(RemoteTagRef.Absent)
+      ),
+      pushConfigured = true,
+      pushAnswer = Some(true),
+      label = Some("api")
+    ) { (result, calls) =>
+      result match {
+        case Left(err: IllegalStateException) =>
+          assert(err.getMessage.contains("selected to KEEP"))
+          assert(err.getMessage.contains("refs/tags/v0.1.0"))
+          assert(err.getMessage.contains("no longer exists"))
+          assert(err.getMessage.contains("before publish"))
+          assert(err.getMessage.contains("artifacts and metadata"))
+          assert(err.getMessage.contains("nonexistent tag"))
+          assert(err.getMessage.contains("for api"))
+          assert(err.getMessage.contains(s"$CommandName help"))
+        case other                            =>
+          fail(s"expected IllegalStateException, got: $other")
+      }
+      assertEquals(calls, List("localTagRef(v0.1.0)"))
+    }
+  }
+
+  test("probeForKeep - preserves commit-level fallback for adapters without exact local refs") {
+    runKeepProbe(
+      buildVcs = StubVcs.recording(
+        _,
+        hasUpstreamValue = true,
+        localTagRefValue = Some(LocalTagRef.Unsupported),
+        remoteTagRefValue = Some(RemoteTagRef.At(KeptCommit))
+      ),
+      pushConfigured = true,
+      pushAnswer = Some(true),
+      expectedCommitHash = KeptCommit
+    ) { (result, calls) =>
+      assert(result.isRight, s"expected compatibility success, got: $result")
+      assertEquals(
+        calls,
+        List(
+          "localTagRef(v0.1.0)",
+          "hasUpstream",
+          "trackingRemote",
+          "remoteTagRefWithTimeout(origin,v0.1.0)"
+        )
+      )
+    }
+  }
+
+  test("probeForKeep - rejects different tag objects even when their commits are the same") {
+    runKeepProbe(
+      buildVcs = StubVcs.recording(
+        _,
+        hasUpstreamValue = true,
+        tagRefHashValue = Some(Some(KeptRef)),
+        remoteTagRefValue = Some(RemoteTagRef.At(OtherRef))
+      ),
+      pushConfigured = true,
+      pushAnswer = Some(true),
+      expectedCommitHash = KeptCommit
+    ) { (result, _) =>
+      result match {
+        case Left(err: IllegalStateException) =>
+          assert(err.getMessage.contains("different tag ref object"))
+          assert(err.getMessage.contains("same commit"))
+          assert(err.getMessage.contains(KeptRef) && err.getMessage.contains(OtherRef))
+        case other                            =>
+          fail(s"expected IllegalStateException, got: $other")
+      }
     }
   }
 
@@ -313,7 +500,7 @@ class RemoteTagProbeSpec extends CatsEffectSuite {
       result match {
         case Left(err: IllegalStateException) =>
           assert(
-            err.getMessage.contains("different commit"),
+            err.getMessage.contains("different tag ref object"),
             s"unexpected message: ${err.getMessage}"
           )
           assert(
@@ -351,7 +538,12 @@ class RemoteTagProbeSpec extends CatsEffectSuite {
       assert(result.isRight, s"expected success on unavailable remote, got: $result")
       assertEquals(
         calls,
-        List("hasUpstream", "trackingRemote", "remoteTagCommitWithTimeout(origin,v0.1.0)")
+        List(
+          "localTagRef(v0.1.0)",
+          "hasUpstream",
+          "trackingRemote",
+          "remoteTagCommitWithTimeout(origin,v0.1.0)"
+        )
       )
     }
   }
@@ -375,6 +567,50 @@ class RemoteTagProbeSpec extends CatsEffectSuite {
           fail(s"expected IllegalStateException, got: $other")
       }
     }
+  }
+
+  test("probeForKeep - rejects real divergent annotated tag objects on the same commit") {
+    Resource
+      .both(
+        contextWithPushAnswer(Some(true)),
+        TestSupport.gitRepoWithBareRemoteResource(s"$fixturePrefix-divergent-annotated")
+      )
+      .use { case (ctx, (repo, _)) =>
+        val git = new Git(repo)
+        for {
+          head         <- IO.blocking {
+                            TestSupport.runGit(repo, "tag", "-a", "-m", "remote release", TagName)
+                            TestSupport.runGit(repo, "push", "origin", TagName)
+                            TestSupport.runGit(repo, "tag", "-d", TagName)
+                            TestSupport.runGit(repo, "tag", "-a", "-m", "local release", TagName)
+                            TestSupport.runGit(repo, "rev-parse", "HEAD").trim
+                          }
+          localCommit  <- git.tagCommitHash(TagName)
+          remoteCommit <- git.remoteTagCommitWithTimeout("origin", TagName, 30.seconds)
+          result       <- RemoteTagProbe
+                            .probeForKeep(
+                              ctx,
+                              git,
+                              TagName,
+                              head,
+                              CommandName,
+                              LogPrefix,
+                              label = None,
+                              pushConfigured = true
+                            )
+                            .attempt
+        } yield {
+          assertEquals(localCommit, Some(head))
+          assertEquals(remoteCommit, RemoteTagCommit.At(head))
+          result match {
+            case Left(err: IllegalStateException) =>
+              assert(err.getMessage.contains("different tag ref object"))
+              assert(err.getMessage.contains("same commit"))
+            case other                            =>
+              fail(s"expected exact-ref conflict, got: $other")
+          }
+        }
+      }
   }
 
   // ── helpers ────────────────────────────────────────────────────────
@@ -481,7 +717,10 @@ private final class StubVcs(
     trackingRemoteValue: String,
     remoteTagExistsValue: Option[Option[Boolean]],
     existsTagValue: Boolean,
-    remoteTagCommitValue: Option[RemoteTagCommit] = None
+    remoteTagCommitValue: Option[RemoteTagCommit] = None,
+    tagRefHashValue: Option[Option[String]] = None,
+    localTagRefValue: Option[LocalTagRef] = None,
+    remoteTagRefValue: Option[RemoteTagRef] = None
 ) extends Vcs {
   override val baseDir: File       = new File(".")
   override val commandName: String = "git"
@@ -518,6 +757,26 @@ private final class StubVcs(
           new AssertionError("remoteTagCommitWithTimeout should not be reached")
         )
       )(IO.pure)
+
+  private[release] override def tagRefHash(name: String): IO[Option[String]] =
+    tagRefHashValue match {
+      case Some(value) => record(s"tagRefHash($name)") *> IO.pure(value)
+      case None        => super.tagRefHash(name)
+    }
+
+  private[release] override def localTagRef(name: String): IO[LocalTagRef] =
+    record(s"localTagRef($name)") *>
+      localTagRefValue.fold(super.localTagRef(name))(IO.pure)
+
+  private[release] override def remoteTagRefWithTimeout(
+      remote: String,
+      tagName: String,
+      timeout: FiniteDuration
+  ): IO[RemoteTagRef] =
+    remoteTagRefValue match {
+      case Some(value) => record(s"remoteTagRefWithTimeout($remote,$tagName)") *> IO.pure(value)
+      case None        => super.remoteTagRefWithTimeout(remote, tagName, timeout)
+    }
 
   // The probe never calls these; surface accidental use as a clear test failure.
   override def currentHash: IO[String]                                                     =
@@ -562,7 +821,10 @@ private object StubVcs {
       trackingRemoteValue: String = "origin",
       remoteTagExistsValue: Option[Option[Boolean]] = None,
       existsTagValue: Boolean = false,
-      remoteTagCommitValue: Option[RemoteTagCommit] = None
+      remoteTagCommitValue: Option[RemoteTagCommit] = None,
+      tagRefHashValue: Option[Option[String]] = None,
+      localTagRefValue: Option[LocalTagRef] = None,
+      remoteTagRefValue: Option[RemoteTagRef] = None
   ): StubVcs =
     new StubVcs(
       callsRef,
@@ -570,7 +832,10 @@ private object StubVcs {
       trackingRemoteValue,
       remoteTagExistsValue,
       existsTagValue,
-      remoteTagCommitValue
+      remoteTagCommitValue,
+      tagRefHashValue,
+      localTagRefValue,
+      remoteTagRefValue
     )
 
   def recording(callsRef: Ref[IO, List[String]]): StubVcs =

@@ -19,6 +19,7 @@ import io.release.runtime.sbt.SbtRuntime
 import munit.CatsEffectSuite
 
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSupport {
 
@@ -375,6 +376,240 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
                           assert(!err.getMessage.contains(versionResolutionFailure))
                         }
       } yield ()
+    }
+  }
+
+  test("check - reuse tentative versions without invoking resolver tasks twice") {
+    preflightFixtureResource.use { case (_, ctx, _) =>
+      val releaseCalls = new AtomicInteger(0)
+      val nextCalls    = new AtomicInteger(0)
+      val project      = ctx.currentProjects.head
+
+      for {
+        countedState <- IO.blocking {
+                          SbtRuntime.appendSessionSettings(
+                            ctx.state,
+                            MonorepoStepTestCompat.countedVersionTaskSettings(
+                              project.ref,
+                              releaseCalls,
+                              nextCalls
+                            )
+                          )
+                        }
+        countedCtx    = ctx.withState(countedState)
+        session       = MonorepoPreparedSession(
+                          countedCtx.state,
+                          countedCtx.releasePlan.get,
+                          countedCtx
+                        )
+        _            <- MonorepoPreflight.check(
+                          session,
+                          Seq(
+                            MonorepoReleaseSteps.detectOrSelectProjects,
+                            MonorepoReleaseSteps.inquireVersions
+                          )
+                        )
+      } yield {
+        assertEquals(releaseCalls.get(), 1)
+        assertEquals(nextCalls.get(), 1)
+      }
+    }
+  }
+
+  test("check - fully pre-resolved versions do not invoke resolver tasks") {
+    preflightFixtureResource.use { case (_, ctx, _) =>
+      val releaseCalls = new AtomicInteger(0)
+      val nextCalls    = new AtomicInteger(0)
+      val project      = ctx.currentProjects.head
+
+      for {
+        countedState <- IO.blocking {
+                          SbtRuntime.appendSessionSettings(
+                            ctx.state,
+                            MonorepoStepTestCompat.countedVersionTaskSettings(
+                              project.ref,
+                              releaseCalls,
+                              nextCalls
+                            )
+                          )
+                        }
+        presetCtx     = ctx
+                          .withState(countedState)
+                          .updateProject(project.ref)(
+                            _.copy(versions = Some("1.0.0" -> "1.1.0-SNAPSHOT"))
+                          )
+        session       = MonorepoPreparedSession(
+                          presetCtx.state,
+                          presetCtx.releasePlan.get,
+                          presetCtx
+                        )
+        _            <- MonorepoPreflight.check(
+                          session,
+                          Seq(
+                            MonorepoReleaseSteps.detectOrSelectProjects,
+                            MonorepoReleaseSteps.inquireVersions
+                          )
+                        )
+      } yield {
+        assertEquals(releaseCalls.get(), 0)
+        assertEquals(nextCalls.get(), 0)
+      }
+    }
+  }
+
+  test("resolveVersions - retry only projects whose tentative seed is missing") {
+    multiProjectPreflightFixtureResource.use { case (_, ctx) =>
+      val coreReleaseCalls = new AtomicInteger(0)
+      val coreNextCalls    = new AtomicInteger(0)
+      val apiReleaseCalls  = new AtomicInteger(0)
+      val apiNextCalls     = new AtomicInteger(0)
+      val core             = ctx.currentProjects.find(_.name == "core").getOrElse(fail("core"))
+      val api              = ctx.currentProjects.find(_.name == "api").getOrElse(fail("api"))
+
+      for {
+        countedState <- IO.blocking {
+                          SbtRuntime.appendSessionSettings(
+                            ctx.state,
+                            MonorepoStepTestCompat.countedVersionTaskSettings(
+                              core.ref,
+                              coreReleaseCalls,
+                              coreNextCalls
+                            ) ++ MonorepoStepTestCompat.countedVersionTaskSettings(
+                              api.ref,
+                              apiReleaseCalls,
+                              apiNextCalls
+                            )
+                          )
+                        }
+        seededCtx     = ctx
+                          .withState(countedState)
+                          .updateProject(core.ref)(
+                            _.copy(versions = Some("1.0.0" -> "1.1.0-SNAPSHOT"))
+                          )
+        resolved     <- MonorepoPreparation.resolveVersions(seededCtx, allowPrompts = false)
+      } yield {
+        assertEquals(coreReleaseCalls.get(), 0)
+        assertEquals(coreNextCalls.get(), 0)
+        assertEquals(apiReleaseCalls.get(), 1)
+        assertEquals(apiNextCalls.get(), 1)
+        assertEquals(
+          resolved.projects.find(_.ref == core.ref).flatMap(_.resolvedVersions),
+          Some("1.0.0" -> "1.1.0-SNAPSHOT")
+        )
+        assert(resolved.projects.find(_.ref == api.ref).flatMap(_.resolvedVersions).nonEmpty)
+      }
+    }
+  }
+
+  test("check - validate only the stable prefix across pre-selection hook phases") {
+    preflightFixtureResource.use { case (_, ctx, _) =>
+      for {
+        firstValidated  <- Ref.of[IO, Int](0)
+        firstExecuted   <- Ref.of[IO, Int](0)
+        secondValidated <- Ref.of[IO, Int](0)
+        secondExecuted  <- Ref.of[IO, Int](0)
+        firstHook        = ProcessStep.Single[MonorepoContext](
+                             name = "after-clean-check:install-selection-state",
+                             execute = current => firstExecuted.update(_ + 1).as(current),
+                             validate = _ => firstValidated.update(_ + 1)
+                           )
+        dependentHook    = ProcessStep.Single[MonorepoContext](
+                             name = "before-selection:require-installed-state",
+                             execute = current => secondExecuted.update(_ + 1).as(current),
+                             validate = _ =>
+                               secondValidated.update(_ + 1) *>
+                                 firstExecuted.get.flatMap {
+                                   case 0 =>
+                                     IO.raiseError(
+                                       new IllegalStateException(
+                                         "dependent validation observed stale setup state"
+                                       )
+                                     )
+                                   case _ => IO.unit
+                                 }
+                           )
+        session          = MonorepoPreparedSession(ctx.state, ctx.releasePlan.get, ctx)
+        summary         <- MonorepoPreflight.check(
+                             session,
+                             Seq(
+                               firstHook,
+                               dependentHook,
+                               MonorepoReleaseSteps.detectOrSelectProjects,
+                               MonorepoReleaseSteps.inquireVersions
+                             )
+                           )
+        firstV          <- firstValidated.get
+        firstE          <- firstExecuted.get
+        secondV         <- secondValidated.get
+        secondE         <- secondExecuted.get
+      } yield {
+        assertEquals(firstV, 1)
+        assertEquals(firstE, 0)
+        assertEquals(secondV, 0)
+        assertEquals(secondE, 0)
+        assertEquals(
+          summary.selectionMode,
+          MonorepoPreflight.Evaluation.NotEvaluated(
+            MonorepoPreflight.SelectionRuntimeHookState
+          )
+        )
+        assertEquals(
+          summary.projects,
+          MonorepoPreflight.Evaluation.NotEvaluated(
+            MonorepoPreflight.ProjectsRuntimeHookState
+          )
+        )
+      }
+    }
+  }
+
+  test("check - validate only the stable hook prefix in a no-boundary custom process") {
+    preflightFixtureResource.use { case (_, ctx, _) =>
+      for {
+        firstValidated  <- Ref.of[IO, Int](0)
+        firstExecuted   <- Ref.of[IO, Int](0)
+        secondValidated <- Ref.of[IO, Int](0)
+        firstHook        = ProcessStep.Single[MonorepoContext](
+                             name = "after-clean-check:install-custom-state",
+                             execute = current => firstExecuted.update(_ + 1).as(current),
+                             validate = _ => firstValidated.update(_ + 1)
+                           )
+        dependentHook    = ProcessStep.Single[MonorepoContext](
+                             name = "before-selection:require-custom-state",
+                             execute = current => IO.pure(current),
+                             validate = _ =>
+                               secondValidated.update(_ + 1) *>
+                                 firstExecuted.get.flatMap {
+                                   case 0 =>
+                                     IO.raiseError(
+                                       new IllegalStateException(
+                                         "dependent no-boundary validation observed stale state"
+                                       )
+                                     )
+                                   case _ => IO.unit
+                                 }
+                           )
+        session          = MonorepoPreparedSession(ctx.state, ctx.releasePlan.get, ctx)
+        summary         <- MonorepoPreflight.check(
+                             session,
+                             Seq(firstHook, dependentHook, MonorepoReleaseSteps.inquireVersions)
+                           )
+        firstV          <- firstValidated.get
+        firstE          <- firstExecuted.get
+        secondV         <- secondValidated.get
+      } yield {
+        assertEquals(firstV, 1)
+        assertEquals(firstE, 0)
+        assertEquals(secondV, 0)
+        assertEquals(
+          summary.projects.map(_.versions),
+          Seq(
+            MonorepoPreflight.Evaluation.NotEvaluated(
+              MonorepoPreflight.VersionsRuntimeHookState
+            )
+          )
+        )
+      }
     }
   }
 

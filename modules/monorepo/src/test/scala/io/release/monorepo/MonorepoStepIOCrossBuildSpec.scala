@@ -2,6 +2,7 @@ package io.release.monorepo
 
 import cats.effect.IO
 import cats.effect.Ref
+import io.release.ReleaseSharedKeys
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
 import io.release.monorepo.internal.*
@@ -14,11 +15,79 @@ import sbt.AttributeKey
 import sbt.Keys.*
 import sbt.LocalProject
 import sbt.Project
+import sbt.Resolver
 import sbt.ThisBuild
 
 import java.io.File
 
 class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSpecSupport {
+
+  test("compose - publish eligibility snapshot retains every cross-build Scala iteration") {
+    loadedContextResource("monorepo-publish-eligibility-cross", Seq("core")) { dir =>
+      val coreBase  = new File(dir, "core")
+      val published = new File(dir, "published-scala-versions.txt")
+      coreBase.mkdirs()
+
+      Seq(
+        Project("root", dir)
+          .aggregate(LocalProject("core"))
+          .settings(
+            scalaVersion                                                    := TestSupport.CurrentScalaVersion,
+            MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks := true
+          ),
+        Project("core", coreBase).settings(
+          scalaVersion                                                      := TestSupport.CurrentScalaVersion,
+          crossScalaVersions                                                := Seq(
+            TestSupport.CurrentScalaVersion,
+            TestSupport.alternateScalaVersion
+          ),
+          publish / skip                                                    := false,
+          publishTo                                                         := Some(Resolver.file("local", new File(dir, "repo"))),
+          ReleaseSharedKeys.releaseIOPublishAction                          := {
+            sbt.IO.append(published, s"${scalaVersion.value}\n")
+          }
+        )
+      )
+    }.use { ctx =>
+      val project = MonorepoSpecSupport.projectNamed(ctx.projects, "core")
+
+      MonorepoComposer
+        .compose(Seq(MonorepoPublishSteps.publishArtifacts), crossBuild = true)(ctx)
+        .flatMap { result =>
+          for {
+            restoredScala <- projectScalaVersionOf(result.state, project.ref)
+            published     <-
+              IO.blocking(
+                sbt.IO
+                  .readLines(
+                    new File(project.baseDir.getParentFile, "published-scala-versions.txt")
+                  )
+              )
+          } yield {
+            assert(result.hasValidatedPublishEligibilitySnapshot)
+            assertEquals(
+              result.validatedPublishEligibility(
+                project.ref,
+                TestSupport.CurrentScalaVersion
+              ),
+              Some(true)
+            )
+            assertEquals(
+              result.validatedPublishEligibility(
+                project.ref,
+                TestSupport.alternateScalaVersion
+              ),
+              Some(true)
+            )
+            assertEquals(restoredScala, Some(TestSupport.CurrentScalaVersion))
+            assertEquals(
+              published,
+              Seq(TestSupport.CurrentScalaVersion, TestSupport.alternateScalaVersion)
+            )
+          }
+        }
+    }
+  }
 
   test(
     "compose - cross-build single-version per-project step validates and executes once and restores the entry scalaVersion"

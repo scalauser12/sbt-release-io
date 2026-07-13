@@ -609,6 +609,239 @@ class CrossBuildSupportSpec extends CatsEffectSuite {
     }
   }
 
+  test("production session markers remain valid after cross-build switch and restore") {
+    val persistentKey = settingKey[String]("persistent setting around cross-build marker")
+    val absentKey     = settingKey[String]("absent transient root after cross-build")
+
+    stateResource("cross-build-support-production-marker").use { baseState =>
+      val coreRef = SbtRuntime.extracted(baseState).currentRef
+
+      for {
+        persistent      <- IO.blocking(
+                             SbtRuntime.appendSessionSettings(
+                               baseState,
+                               Seq(coreRef / persistentKey := "persistent")
+                             )
+                           )
+        switched        <- CrossBuildSupport.switchScalaVersion(
+                             persistent,
+                             TestSupport.alternateScalaVersion,
+                             Seq(coreRef),
+                             ReleaseLogPrefixes.Core
+                           )
+        switchedLifted  <- IO.blocking(
+                             SbtRuntime.promoteTransientSettingsByKey(
+                               switched,
+                               Seq(absentKey.key)
+                             )
+                           )
+        restored        <- CrossBuildSupport.restoreEntryScalaSession(persistent, switchedLifted)
+        restoredLifted  <- IO.blocking(
+                             SbtRuntime.promoteTransientSettingsByKey(
+                               restored,
+                               Seq(absentKey.key)
+                             )
+                           )
+        switchedVersion <- projectScalaVersionOf(switchedLifted, coreRef)
+        restoredVersion <- projectScalaVersionOf(restoredLifted, coreRef)
+      } yield {
+        assert(
+          switchedLifted eq switched,
+          "a suffix-free switched structure must retain the bridge's O(1) no-op marker"
+        )
+        assert(
+          restoredLifted eq restored,
+          "a suffix-free restored structure must retain the bridge's O(1) no-op marker"
+        )
+        assertEquals(switchedVersion, Some(TestSupport.alternateScalaVersion))
+        assertEquals(restoredVersion, Some(TestSupport.CurrentScalaVersion))
+      }
+    }
+  }
+
+  test("empty appendWithSession rebuild preserves persistent definition provenance") {
+    val persistentKey = settingKey[String]("persistent setting before empty transient append")
+    val absentKey     = settingKey[String]("absent root after empty transient append")
+
+    stateResource("cross-build-support-empty-transient-append").use { baseState =>
+      val coreRef = SbtRuntime.extracted(baseState).currentRef
+
+      for {
+        prepared           <- IO.blocking {
+                                val persistent = SbtRuntime.appendSessionSettings(
+                                  baseState,
+                                  Seq(coreRef / persistentKey := "persistent")
+                                )
+                                val before     = SbtRuntime.extracted(persistent)
+                                val rebuilt    = before.appendWithSession(Seq.empty, persistent)
+                                val after      = SbtRuntime.extracted(rebuilt)
+                                val promoted   = SbtRuntime.promoteTransientSettingsByKey(
+                                  rebuilt,
+                                  Seq(absentKey.key)
+                                )
+
+                                assert(before.session eq after.session)
+                                assert(!(before.structure eq after.structure))
+                                assertEquals(
+                                  after.structure.settings.length,
+                                  before.structure.settings.length
+                                )
+                                assert(
+                                  promoted eq rebuilt,
+                                  "an empty canonical rebuild must have no transient definitions to promote"
+                                )
+                                (rebuilt, promoted)
+                              }
+        (rebuilt, promoted) = prepared
+        switched           <- CrossBuildSupport.switchScalaVersion(
+                                promoted,
+                                TestSupport.alternateScalaVersion,
+                                Seq(coreRef),
+                                ReleaseLogPrefixes.Core
+                              )
+        restored           <- CrossBuildSupport.restoreEntryScalaSession(rebuilt, switched)
+        switchedVersion    <- projectScalaVersionOf(switched, coreRef)
+        restoredVersion    <- projectScalaVersionOf(restored, coreRef)
+      } yield {
+        assertEquals(switchedVersion, Some(TestSupport.alternateScalaVersion))
+        assertEquals(restoredVersion, Some(TestSupport.CurrentScalaVersion))
+      }
+    }
+  }
+
+  test("cross-build rebuild keeps non-Scala transient dependencies promotable") {
+    val persistentKey = settingKey[String]("persistent cross-build prefix setting")
+    val helperKey     = settingKey[String]("transient cross-build helper")
+    val resolverKey   = settingKey[String]("transient cross-build resolver")
+    val unrelatedKey  = settingKey[String]("unrelated transient cross-build setting")
+
+    stateResource("cross-build-support-transient-promotion").use { baseState =>
+      val coreRef = SbtRuntime.extracted(baseState).currentRef
+
+      for {
+        persistent      <- IO.blocking(
+                             SbtRuntime.appendSessionSettings(
+                               baseState,
+                               Seq(coreRef / persistentKey := "persistent")
+                             )
+                           )
+        transient       <- IO.blocking(
+                             SbtRuntime.appendWithSession(
+                               persistent,
+                               Seq(
+                                 coreRef / helperKey    := "helper",
+                                 coreRef / resolverKey  := s"${(coreRef / helperKey).value}-resolved",
+                                 coreRef / unrelatedKey := "drop-me",
+                                 coreRef / scalaVersion := "0.0.0-transient"
+                               )
+                             )
+                           )
+        switched        <- CrossBuildSupport.switchScalaVersion(
+                             transient,
+                             TestSupport.alternateScalaVersion,
+                             Seq(coreRef),
+                             ReleaseLogPrefixes.Core
+                           )
+        promoted        <- IO.blocking(
+                             SbtRuntime.promoteTransientSettingsByKey(
+                               switched,
+                               Seq(resolverKey.key)
+                             )
+                           )
+        rebuilt         <- IO.blocking(
+                             SbtRuntime.appendSessionSettings(
+                               promoted,
+                               Seq(coreRef / persistentKey := "rebuilt")
+                             )
+                           )
+        switchedVersion <- projectScalaVersionOf(rebuilt, coreRef)
+        extracted        = SbtRuntime.extracted(rebuilt)
+      } yield {
+        assertEquals(extracted.get(coreRef / resolverKey), "helper-resolved")
+        assertEquals(extracted.get(coreRef / helperKey), "helper")
+        assertEquals(extracted.getOpt(coreRef / unrelatedKey), None)
+        assertEquals(
+          switchedVersion,
+          Some(TestSupport.alternateScalaVersion),
+          "the transient Scala override must not survive the cross-build switch"
+        )
+      }
+    }
+  }
+
+  test("transient append preserves the current suffix and gives the new overlay precedence") {
+    val persistentKey = settingKey[String]("persistent setting before transient append")
+    val helperKey     = settingKey[String]("helper retained across transient append")
+    val targetKey     = settingKey[String]("target overridden by transient append")
+    val unrelatedKey  = settingKey[String]("unrelated setting retained until promotion")
+
+    stateResource("transient-append-preserves-current").use { baseState =>
+      val coreRef = SbtRuntime.extracted(baseState).currentRef
+
+      IO.blocking {
+        val persistent = SbtRuntime.appendSessionSettings(
+          baseState,
+          Seq(coreRef / persistentKey := "persistent")
+        )
+        val existing   = SbtRuntime.appendWithSession(
+          persistent,
+          Seq(
+            coreRef / helperKey    := "hook-helper",
+            coreRef / targetKey    := "hook-target",
+            coreRef / unrelatedKey := "transient-unrelated"
+          )
+        )
+        val before     = SbtRuntime.extracted(existing)
+        val appended   = SbtRuntime.appendTransientSettingsPreservingCurrent(
+          existing,
+          Seq(
+            coreRef / targetKey := s"${(coreRef / helperKey).value}-release"
+          )
+        )
+        val after      = SbtRuntime.extracted(appended)
+
+        assert(
+          before.session eq after.session,
+          "a transient append must retain the exact SessionSettings instance"
+        )
+        assertEquals(after.session.rawAppend, before.session.rawAppend)
+        assertEquals(after.get(coreRef / helperKey), "hook-helper")
+        assertEquals(after.get(coreRef / unrelatedKey), "transient-unrelated")
+        assertEquals(
+          after.get(coreRef / targetKey),
+          "hook-helper-release",
+          "the newly appended overlay must follow and override the existing suffix"
+        )
+
+        val promoted      = SbtRuntime.promoteTransientSettingsByKey(
+          appended,
+          Seq(targetKey.key)
+        )
+        val promotedAgain = SbtRuntime.promoteTransientSettingsByKey(
+          promoted,
+          Seq(targetKey.key)
+        )
+        val rebuilt       = SbtRuntime.appendSessionSettings(
+          promoted,
+          Seq(coreRef / persistentKey := "rebuilt")
+        )
+        val rebuiltValues = SbtRuntime.extracted(rebuilt)
+
+        assert(
+          promotedAgain eq promoted,
+          "promotion must restore a suffix-free exact marker"
+        )
+        assertEquals(rebuiltValues.get(coreRef / helperKey), "hook-helper")
+        assertEquals(rebuiltValues.get(coreRef / targetKey), "hook-helper-release")
+        assertEquals(rebuiltValues.getOpt(coreRef / unrelatedKey), None)
+        assert(
+          SbtRuntime.appendTransientSettingsPreservingCurrent(promoted, Nil) eq promoted,
+          "an empty transient append must return the identical State"
+        )
+      }
+    }
+  }
+
   /** Simulate sbt's `session clear`: drop session.rawAppend (and append) but keep
     * session.original, then rebuild the structure from the cleared session.
     */

@@ -59,11 +59,18 @@ private[monorepo] object MonorepoPreparation {
   ): IO[MonorepoContext] =
     ctx.currentProjects.toList.foldLeft(IO.pure(ctx)) { (ioCtx, project) =>
       ioCtx.flatMap { currentCtx =>
-        MonorepoVersionWorkflow
-          .resolveProjectVersions(currentCtx, project, allowPrompts = allowPrompts)
-          .map { case (updatedCtx, resolved) =>
-            MonorepoVersionWorkflow.withResolvedVersions(updatedCtx, project.ref, resolved)
-          }
+        MonorepoVersionWorkflow.resolveProjectVersionsFromSeed(currentCtx, project).flatMap {
+          case Some(resolved) =>
+            IO.pure(
+              MonorepoVersionWorkflow.withResolvedVersions(currentCtx, project.ref, resolved)
+            )
+          case None           =>
+            MonorepoVersionWorkflow
+              .resolveProjectVersions(currentCtx, project, allowPrompts = allowPrompts)
+              .map { case (updatedCtx, resolved) =>
+                MonorepoVersionWorkflow.withResolvedVersions(updatedCtx, project.ref, resolved)
+              }
+        }
       }
     }
 

@@ -19,9 +19,10 @@ class Git(val baseDir: File) extends Vcs {
   //   - It is diagnostic-only, never a correctness hazard. The genuinely dangerous existence
   //     check, `existsTag`, uses the strict `runBooleanProbe`, which RAISES on exit 128 — so a
   //     real, existing tag is never silently treated as absent. The only consumers of this
-  //     recovery are the resolution lookups `tagCommitHash` and `upstreamTrackingHash`, and
-  //     both degrade conservatively (a `None` tightens the tag-keep decision to a mismatch/abort
-  //     and re-prompts on the upstream path rather than proceeding unsafely).
+  //     recovery are the diagnostic resolution lookups `tagCommitHash` and
+  //     `upstreamTrackingHash`; they degrade conservatively. Exact local tag-ref lookup uses
+  //     a strict command path below because confusing a command failure with an absent ref
+  //     would let a keep-tag preflight proceed unsafely.
   //   - The upstream path is additionally swallowed one layer up in `VcsOps.currentUpstreamTip`,
   //     so narrowing here would not surface those errors anyway.
   //   - Narrowing to "not a valid ref" cannot be done by exit code alone (a corrupt object also
@@ -216,6 +217,41 @@ class Git(val baseDir: File) extends Vcs {
       )
     )
 
+  private[release] override def tagRefHash(name: String): IO[Option[String]] =
+    exactLocalTagRefHash(name)
+
+  private[release] override def localTagRef(name: String): IO[LocalTagRef] =
+    exactLocalTagRefHash(name).map {
+      case Some(refHash) => LocalTagRef.At(refHash)
+      case None          => LocalTagRef.Absent
+    }
+
+  /** Strict exact-ref lookup used by the keep-tag safety probe.
+    *
+    * The first `show-ref --quiet` reuses [[existsTag]]'s portable exit contract
+    * (0 = present, 1 = absent, every other exit = failure). Once present, a
+    * second strict lookup reads the hash; disappearance or command failure
+    * between the two probes raises instead of falling back to a commit hash.
+    */
+  private def exactLocalTagRefHash(name: String): IO[Option[String]] = {
+    val ref     = s"refs/tags/$name"
+    val context = s"git show-ref --verify --hash $ref"
+
+    existsTag(name).flatMap {
+      case false => IO.pure(None)
+      case true  =>
+        runSingleLine("show-ref", "--verify", "--hash", ref)(context)
+          .map(_.trim)
+          .flatMap { refHash =>
+            IO.raiseWhen(refHash.isEmpty)(
+              new IllegalStateException(
+                s"$context produced an empty hash on stdout; expected exactly one non-empty hash"
+              )
+            ).as(Some(refHash))
+          }
+    }
+  }
+
   // `-z` disables C-quoting so paths with non-ASCII or special characters compare equal
   // to the literal relative paths produced by VcsOps.relativizeToBase.
   def modifiedFiles: IO[Seq[String]] =
@@ -312,6 +348,25 @@ class Git(val baseDir: File) extends Vcs {
         case _                                    => RemoteTagCommit.Unavailable
       }
 
+  private[release] override def remoteTagRefWithTimeout(
+      remote: String,
+      tagName: String,
+      timeout: FiniteDuration
+  ): IO[RemoteTagRef] =
+    // `--refs` suppresses peeled `^{}` pseudo-refs. The remaining plain ref hash
+    // is the exact object Git's non-force tag update compares on the remote.
+    GitProcessSupport
+      .runCapturedWithTimeout(
+        baseDir,
+        Seq("ls-remote", "--refs", "--tags", "--", remote, s"refs/tags/$tagName"),
+        timeout
+      )
+      .map {
+        case Some(result) if result.exitCode == 0 =>
+          parseRemoteTagRef(tagName, result.stdout)
+        case _                                    => RemoteTagRef.Unavailable
+      }
+
   private def parseRemoteTagCommit(
       tagName: String,
       lines: Vector[String]
@@ -326,6 +381,15 @@ class Git(val baseDir: File) extends Vcs {
       .orElse(shaFor(s"refs/tags/$tagName"))
       .fold[RemoteTagCommit](RemoteTagCommit.Absent)(RemoteTagCommit.At(_))
   }
+
+  private def parseRemoteTagRef(
+      tagName: String,
+      lines: Vector[String]
+  ): RemoteTagRef =
+    lines.iterator
+      .map(_.split('\t'))
+      .collectFirst { case Array(sha, ref) if ref == s"refs/tags/$tagName" => sha }
+      .fold[RemoteTagRef](RemoteTagRef.Absent)(RemoteTagRef.At(_))
 
   // ── Actions ──────────────────────────────────────────────────────────
 

@@ -52,7 +52,11 @@ trait ChangeDetectionSpecSupport {
       state: State,
       sharedPaths: Seq[String] = Seq.empty,
       additionalExcludeFiles: Seq[File] = Seq.empty,
-      tagNameFn: (String, String) => String = perProjectTagName
+      tagNameFn: (String, String) => String = perProjectTagName,
+      loadedProjectBaseDirs: Map[ProjectRef, File] = Map.empty,
+      diffLoader: (Vcs, String) => IO[Either[String, Seq[String]]] =
+        ChangeDetection.diffFilesSinceTag,
+      retainedDiffCountObserver: Int => IO[Unit] = _ => IO.unit
   ): IO[Seq[ProjectReleaseInfo]] =
     ChangeDetection.detectChangedProjects(
       vcs,
@@ -60,7 +64,10 @@ trait ChangeDetectionSpecSupport {
       tagNameFn,
       state,
       additionalExcludeFiles = additionalExcludeFiles,
-      sharedPaths = sharedPaths
+      sharedPaths = sharedPaths,
+      loadedProjectBaseDirs = loadedProjectBaseDirs,
+      diffLoader = diffLoader,
+      retainedDiffCountObserver = retainedDiffCountObserver
     )
 
   protected def detectVcs(repo: File): IO[Vcs] =

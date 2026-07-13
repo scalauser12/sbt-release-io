@@ -1,8 +1,8 @@
 package io.release
 
 import cats.effect.IO
+import io.release.runtime.sbt.SbtRuntime
 import _root_.sbt.Def.ScopedKey
-import _root_.sbt.util.Show
 import _root_.sbt.{internal as _, *}
 
 /** Shared cross-build utilities used by both the core [[ReleaseComposer]] and the
@@ -132,12 +132,12 @@ private[release] object CrossBuildSupport {
     * interactive session that was already on `++ X` before the release is left on `++
     * X` after, rather than silently snapping back to the build's loaded version.
     *
-    * Settings applied via `Extracted.appendWithSession` (which never persist into the
-    * session) are intentionally NOT preserved by any [[rebuildWithScalaSlice]] call,
-    * including the switch itself — the rebuild reads the Scala slice from
-    * `session.mergeSettings`, which doesn't see appendWithSession's structure-only
-    * additions. Replaying them would inject duplicates into `rawAppend` that survive a
-    * later `session clear`, "sticking" what was meant to be a transient override.
+    * Settings applied via `Extracted.appendWithSession` remain structure-only: the bridge
+    * retains non-Scala definitions as a transient suffix after the rebuilt persistent
+    * session prefix, without copying them into `rawAppend`. Transient Scala definitions
+    * are deliberately stripped so the requested switch or restored entry slice stays
+    * authoritative. A later ordinary session rebuild may still discard the retained
+    * non-Scala suffix unless its owner explicitly promotes it.
     */
   def restoreEntryScalaSession(entryState: State, currentState: State): IO[State] =
     IO.blocking {
@@ -168,12 +168,13 @@ private[release] object CrossBuildSupport {
     * restore passes a broad filter so every accumulated switch addition is dropped
     * before the entry slice is replayed.
     *
-    * Using `mergeSettings` rather than the structure's own settings list makes the
-    * post-switch view consistent before and after any later
-    * `Extracted.appendWithSession` rebuild — `appendWithSession` itself rebuilds from
-    * `session.mergeSettings`, so anything that survives our rebuild here will also
-    * survive theirs. Non-Scala settings are preserved from the current structure
-    * (including settings applied via prior `appendWithSession`).
+    * The bridge rebuilds the canonical transformed `session.mergeSettings` prefix and
+    * appends the retained non-Scala transient suffix in its original order. This keeps
+    * the structure compatible with later transient promotion while preserving settings
+    * installed via prior `appendWithSession` calls. A subsequent plain
+    * `appendWithSession` still has sbt's normal replacement behavior; callers that must
+    * append another overlay without losing the current suffix use
+    * `SbtRuntime.appendTransientSettingsPreservingCurrent`.
     *
     * Config-scoped overrides like `core / Test / scalaVersion := X` from `build.sbt`
     * (which live in `session.original`) are intentionally preserved across the switch:
@@ -193,22 +194,13 @@ private[release] object CrossBuildSupport {
       currentState: State,
       rawAppendStrip: Setting[?] => Boolean,
       addToRawAppend: Seq[Setting[?]]
-  ): State = {
-    val extracted                            = Project.extract(currentState)
-    import extracted.*
-    // Re-declare as implicit: Scala 3's import semantics don't propagate the implicit
-    // status of imported members uniformly with Scala 2's, so re-binding keeps
-    // LoadCompat.reapply's implicit Show[ScopedKey[?]] resolvable on both lanes. Do not
-    // remove without verifying both `sbt -Dsbt.version=1.x` and `./bin/sbt2-clean`.
-    implicit val showKey: Show[ScopedKey[?]] = extracted.showKey
-
-    val filteredRawAppend = session.rawAppend.filterNot(rawAppendStrip)
-    val newSession        = session.copy(rawAppend = filteredRawAppend ++ addToRawAppend)
-    val cleared           = structure.settings.filterNot(isScalaSetting)
-    val sessionScala      = newSession.mergeSettings.filter(isScalaSetting)
-    val newStructure      = LoadCompat.reapply(cleared ++ sessionScala, structure)
-    Project.setProject(newSession, newStructure, currentState)
-  }
+  ): State =
+    SbtRuntime.rebuildSessionPreservingTransientSettings(
+      currentState,
+      rawAppendStrip,
+      addToRawAppend,
+      transientStrip = isScalaSetting
+    )
 
   /** Build a function that, given an iteration scalaVersion, returns the project refs
     * whose `crossScalaVersions` contains it — the sbt-stock `Cross.switchVersion`

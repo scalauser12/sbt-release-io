@@ -1,0 +1,9 @@
+target/
+project/target/
+project/project/
+global/
+*.class
+*.log
+published
+after-publish-hook-ran
+after-publish-scala

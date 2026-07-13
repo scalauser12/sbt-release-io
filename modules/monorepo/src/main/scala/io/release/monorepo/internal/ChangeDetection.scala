@@ -25,21 +25,35 @@ private[monorepo] object ChangeDetection {
       vcs: Vcs,
       state: State,
       globalExcludes: Set[String],
-      diffScopeByProject: Map[String, Either[String, String]],
+      diffScopeByProject: Map[ProjectRef, Either[String, String]],
+      loadedDiffScopes: Map[ProjectRef, String],
       sharedPaths: Seq[String],
-      tagNameFn: (String, String) => String
+      tagNameFn: (String, String) => String,
+      loadDiff: String => IO[Either[String, Seq[String]]],
+      observeRetainedDiffCount: Int => IO[Unit]
   )
   private final case class SharedPathCacheKey(tag: String, excludes: Vector[String])
+  private final case class PreparedProject(
+      project: ProjectReleaseInfo,
+      tagLookup: ProjectTagLookup,
+      finalTagConsumer: Option[String]
+  )
 
   /** Per-run caches threaded through the project fold: `tagDiffs` holds one full-repo diff
-    * result per distinct tag (`Left` = error detail; failures are cached so a failed diff is
+    * result per active tag (`Left` = error detail; failures are cached so a failed diff is
     * not retried per project); `sharedChanged` preserves the log-once shared-path decision
-    * per (tag, effective excludes).
+    * per (tag, effective excludes). A tag is evicted after its final project consumer.
     */
   private final case class DiffCaches(
       tagDiffs: Map[String, Either[String, Seq[String]]],
       sharedChanged: Map[SharedPathCacheKey, Boolean]
-  )
+  ) {
+    def evict(tag: String): DiffCaches =
+      DiffCaches(
+        tagDiffs = tagDiffs - tag,
+        sharedChanged = sharedChanged.filterNot { case (key, _) => key.tag == tag }
+      )
+  }
   private object DiffCaches {
     val empty: DiffCaches = DiffCaches(Map.empty, Map.empty)
   }
@@ -87,14 +101,14 @@ private[monorepo] object ChangeDetection {
       .map(_.leftMap(errorMessage))
 
   private def cachedDiffSinceTag(
-      vcs: Vcs,
       tag: String,
-      cache: Map[String, Either[String, Seq[String]]]
+      cache: Map[String, Either[String, Seq[String]]],
+      loadDiff: String => IO[Either[String, Seq[String]]]
   ): IO[(Map[String, Either[String, Seq[String]]], Either[String, Seq[String]])] =
     cache.get(tag) match {
       case Some(result) => IO.pure(cache -> result)
       case None         =>
-        diffFilesSinceTag(vcs, tag).map(result => cache.updated(tag, result) -> result)
+        loadDiff(tag).map(result => cache.updated(tag, result) -> result)
     }
 
   /** Look up the last tag matching a pattern via `git describe` / `git tag`. */
@@ -160,38 +174,69 @@ private[monorepo] object ChangeDetection {
       tagNameFn: (String, String) => String,
       state: State,
       additionalExcludeFiles: Seq[File] = Seq.empty,
-      sharedPaths: Seq[String] = Seq.empty
+      sharedPaths: Seq[String] = Seq.empty,
+      loadedProjectBaseDirs: Map[ProjectRef, File] = Map.empty,
+      diffLoader: (Vcs, String) => IO[Either[String, Seq[String]]] = diffFilesSinceTag,
+      retainedDiffCountObserver: Int => IO[Unit] = _ => IO.unit
   ): IO[Seq[ProjectReleaseInfo]] =
     for {
       diffScopeByProject <- IO.blocking(resolveDiffScopes(vcs, projects))
       _                  <- IO.blocking(logUnresolvedProjectScopes(state, projects, diffScopeByProject))
+      loadedDiffScopes   <- IO.blocking {
+                              resolveLoadedDiffScopes(
+                                vcs,
+                                loadedProjectBaseDirs ++ projects.map(p => p.ref -> p.baseDir)
+                              )
+                            }
       globalExcludes     <- IO.blocking(resolveGlobalExcludes(vcs, state, additionalExcludeFiles))
       inputs              = DetectionInputs(
                               vcs = vcs,
                               state = state,
                               globalExcludes = globalExcludes,
                               diffScopeByProject = diffScopeByProject,
+                              loadedDiffScopes = loadedDiffScopes,
                               sharedPaths = sharedPaths,
-                              tagNameFn = tagNameFn
+                              tagNameFn = tagNameFn,
+                              loadDiff = tag => diffLoader(vcs, tag),
+                              observeRetainedDiffCount = retainedDiffCountObserver
                             )
-      accumulated        <- projects.toList.foldLeftM(
+      prepared           <- prepareProjects(inputs, projects)
+      accumulated        <- prepared.toList.foldLeftM(
                               (DiffCaches.empty, Vector.empty[ProjectReleaseInfo])
-                            ) { case ((caches, acc), project) =>
-                              processProject(inputs, project, caches).map {
+                            ) { case ((caches, acc), preparedProject) =>
+                              processProject(inputs, preparedProject, caches).flatMap {
                                 case (updatedCaches, changed) =>
-                                  updatedCaches -> (if (changed) acc :+ project else acc)
+                                  val retainedCaches = preparedProject.finalTagConsumer
+                                    .fold(updatedCaches)(updatedCaches.evict)
+                                  inputs.observeRetainedDiffCount(retainedCaches.tagDiffs.size).as {
+                                    retainedCaches ->
+                                      (if (changed) acc :+ preparedProject.project else acc)
+                                  }
                               }
                             }
     } yield accumulated._2
 
   /** Resolve each project's diff scope — `Right(relativePath)` or `Left(errorDetail)` — keyed by
-    * project name. Single source of truth for resolved-vs-unresolved project scope.
+    * project ref. Single source of truth for resolved-vs-unresolved project scope.
     */
   private def resolveDiffScopes(
       vcs: Vcs,
       projects: Seq[ProjectReleaseInfo]
-  ): Map[String, Either[String, String]] =
-    projects.map(project => project.name -> resolveDiffScope(vcs, project)).toMap
+  ): Map[ProjectRef, Either[String, String]] =
+    projects.map(project => project.ref -> resolveDiffScope(vcs, project)).toMap
+
+  /** Resolve all loaded project directories that live under this VCS root. Unrelated builds
+    * outside the root cannot contribute paths to the diff and are intentionally ignored.
+    */
+  private def resolveLoadedDiffScopes(
+      vcs: Vcs,
+      loadedProjectBaseDirs: Map[ProjectRef, File]
+  ): Map[ProjectRef, String] =
+    loadedProjectBaseDirs.flatMap { case (ref, baseDir) =>
+      gitRelativize(vcs.baseDir, baseDir).map { path =>
+        ref -> (if (path.isEmpty) "." else path)
+      }
+    }
 
   /** Warn about projects whose diff scope could not be resolved. Iterates `projects` so the
     * warning lists names/details in deterministic project order, not `Map` iteration order.
@@ -199,11 +244,11 @@ private[monorepo] object ChangeDetection {
   private def logUnresolvedProjectScopes(
       state: State,
       projects: Seq[ProjectReleaseInfo],
-      diffScopeByProject: Map[String, Either[String, String]]
+      diffScopeByProject: Map[ProjectRef, Either[String, String]]
   ): Unit = {
     val unresolved =
       projects.flatMap(project =>
-        diffScopeByProject.get(project.name).collect { case Left(details) =>
+        diffScopeByProject.get(project.ref).collect { case Left(details) =>
           project.name -> details
         }
       )
@@ -243,38 +288,68 @@ private[monorepo] object ChangeDetection {
     resolved.toSet
   }
 
-  /** Evaluate a single project: look up its tag, check shared paths, scope the tag diff.
+  /** Resolve all tag lookups before diffing so the final consumer of each distinct tag is
+    * known. This lets the project fold retain a full-repository diff only while a later
+    * project can still reuse it.
+    */
+  private def prepareProjects(
+      inputs: DetectionInputs,
+      projects: Seq[ProjectReleaseInfo]
+  ): IO[Vector[PreparedProject]] =
+    projects.toVector
+      .traverse(project => projectTagLookup(inputs, project).map(project -> _))
+      .map { lookups =>
+        val finalConsumerByTag = lookups.zipWithIndex.foldLeft(Map.empty[String, Int]) {
+          case (acc, ((_, ProjectTagLookup(_, TagLookupResult.TagFound(tag))), index)) =>
+            acc.updated(tag, index)
+          case (acc, _)                                                                => acc
+        }
+
+        lookups.zipWithIndex.map { case ((project, lookup), index) =>
+          val finalTagConsumer = lookup.result match {
+            case TagLookupResult.TagFound(tag) if finalConsumerByTag.get(tag).contains(index) =>
+              Some(tag)
+            case _                                                                            =>
+              None
+          }
+          PreparedProject(project, lookup, finalTagConsumer)
+        }
+      }
+
+  /** Evaluate a single project: check shared paths and scope its prepared tag diff.
     * Returns the updated caches and whether the project has changed.
     */
   private def processProject(
       inputs: DetectionInputs,
-      project: ProjectReleaseInfo,
+      prepared: PreparedProject,
       caches: DiffCaches
-  ): IO[(DiffCaches, Boolean)] =
-    projectTagLookup(inputs, project).flatMap { case ProjectTagLookup(tagPattern, tagLookup) =>
-      IO.blocking(
-        inputs.globalExcludes ++ gitRelativize(inputs.vcs.baseDir, project.versionFile).toSet
-      ).flatMap { excludes =>
-        sharedPathsChanged(inputs, caches, tagLookup, excludes).flatMap {
-          case (cachesAfterShared, sharedChanged) =>
-            val diffScope         = inputs.diffScopeByProject(project.name)
-            val excludedChildDirs = childDirPrefixes(inputs, project, diffScope)
-            if (sharedChanged) IO.pure(cachesAfterShared -> true)
-            else
-              hasChangedSinceLastTag(
-                inputs.vcs,
-                project,
-                tagPattern,
-                tagLookup,
-                inputs.state,
-                excludes,
-                diffScope,
-                excludedChildDirs,
-                cachesAfterShared
-              )
-        }
+  ): IO[(DiffCaches, Boolean)] = {
+    val project                                 = prepared.project
+    val ProjectTagLookup(tagPattern, tagLookup) = prepared.tagLookup
+
+    IO.blocking(
+      inputs.globalExcludes ++ gitRelativize(inputs.vcs.baseDir, project.versionFile).toSet
+    ).flatMap { excludes =>
+      sharedPathsChanged(inputs, caches, tagLookup, excludes).flatMap {
+        case (cachesAfterShared, sharedChanged) =>
+          val diffScope         = inputs.diffScopeByProject(project.ref)
+          val excludedChildDirs = childDirPrefixes(inputs, project, diffScope)
+          if (sharedChanged) IO.pure(cachesAfterShared -> true)
+          else
+            hasChangedSinceLastTag(
+              project,
+              tagPattern,
+              tagLookup,
+              inputs.state,
+              excludes,
+              diffScope,
+              excludedChildDirs,
+              cachesAfterShared,
+              inputs.loadDiff
+            )
       }
     }
+  }
 
   private def projectTagLookup(
       inputs: DetectionInputs,
@@ -320,7 +395,7 @@ private[monorepo] object ChangeDetection {
         caches.sharedChanged.get(cacheKey) match {
           case Some(changed) => IO.pure(caches -> changed)
           case None          =>
-            cachedDiffSinceTag(inputs.vcs, tag, caches.tagDiffs).flatMap {
+            cachedDiffSinceTag(tag, caches.tagDiffs, inputs.loadDiff).flatMap {
               case (tagDiffs, diffResult) =>
                 checkSharedPaths(inputs.state, tag, inputs.sharedPaths, excludes, diffResult)
                   .map { changed =>
@@ -341,9 +416,9 @@ private[monorepo] object ChangeDetection {
   ): Set[String] =
     diffScope match {
       case Right(scope) =>
-        inputs.diffScopeByProject.iterator.collect {
-          case (name, Right(path))
-              if name != project.name && path != "." && path.nonEmpty &&
+        inputs.loadedDiffScopes.iterator.collect {
+          case (ref, path)
+              if ref != project.ref && path != "." && path.nonEmpty && path != scope &&
                 (scope == "." || path.startsWith(scope + "/")) =>
             path
         }.toSet
@@ -385,7 +460,6 @@ private[monorepo] object ChangeDetection {
 
   /** Check whether a project has changed since its last matching tag. */
   private def hasChangedSinceLastTag(
-      vcs: Vcs,
       project: ProjectReleaseInfo,
       tagPattern: String,
       tagLookup: TagLookupResult,
@@ -393,7 +467,8 @@ private[monorepo] object ChangeDetection {
       excludePaths: Set[String],
       diffScope: Either[String, String],
       childDirPrefixes: Set[String],
-      caches: DiffCaches
+      caches: DiffCaches,
+      loadDiff: String => IO[Either[String, Seq[String]]]
   ): IO[(DiffCaches, Boolean)] = {
     import TagLookupResult.*
 
@@ -424,16 +499,17 @@ private[monorepo] object ChangeDetection {
               )
             }.as(caches -> true)
           case Right(baseRelative) =>
-            cachedDiffSinceTag(vcs, tag, caches.tagDiffs).flatMap { case (tagDiffs, diffResult) =>
-              diffProjectSinceTag(
-                project,
-                tag,
-                baseRelative,
-                state,
-                excludePaths,
-                childDirPrefixes,
-                diffResult
-              ).map(changed => caches.copy(tagDiffs = tagDiffs) -> changed)
+            cachedDiffSinceTag(tag, caches.tagDiffs, loadDiff).flatMap {
+              case (tagDiffs, diffResult) =>
+                diffProjectSinceTag(
+                  project,
+                  tag,
+                  baseRelative,
+                  state,
+                  excludePaths,
+                  childDirPrefixes,
+                  diffResult
+                ).map(changed => caches.copy(tagDiffs = tagDiffs) -> changed)
             }
         }
     }

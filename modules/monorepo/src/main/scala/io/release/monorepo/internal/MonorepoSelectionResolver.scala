@@ -145,18 +145,20 @@ private[monorepo] object MonorepoSelectionResolver {
           detectWithCustomDetector(ctx, orderedProjects, detector)
         case None           =>
           for {
-            tagSettings <- MonorepoTagSettings.resolveTagSettings(ctx.state)
-            vcs         <- IO.fromOption(ctx.vcs)(
-                             new IllegalStateException("VCS not initialized")
-                           )
-            changed     <- ChangeDetection.detectChangedProjects(
-                             vcs,
-                             orderedProjects,
-                             tagSettings.perProjectTagName,
-                             ctx.state,
-                             settings.userExcludes,
-                             settings.sharedPaths
-                           )
+            tagSettings           <- MonorepoTagSettings.resolveTagSettings(ctx.state)
+            vcs                   <- IO.fromOption(ctx.vcs)(
+                                       new IllegalStateException("VCS not initialized")
+                                     )
+            loadedProjectBaseDirs <- MonorepoProjectResolver.resolveLoadedBaseDirs(ctx.state)
+            changed               <- ChangeDetection.detectChangedProjects(
+                                       vcs,
+                                       orderedProjects,
+                                       tagSettings.perProjectTagName,
+                                       ctx.state,
+                                       settings.userExcludes,
+                                       settings.sharedPaths,
+                                       loadedProjectBaseDirs
+                                     )
           } yield changed
       }
 

@@ -223,10 +223,29 @@ private[monorepo] object MonorepoVersionWorkflow {
   def withReleaseVersionOverlay[A](
       ctx: MonorepoContext
   )(body: State => IO[A]): IO[A] =
+    withReleaseVersionOverlayUsing(ctx, SbtRuntime.appendWithSession)(body)
+
+  /** Sequential compatibility flows may execute a hook before publish
+    * validation consumes the release-version overlay. Preserve settings that
+    * the hook installed through `Extracted.appendWithSession`, while keeping
+    * the fresh release version last so overlay precedence remains unchanged.
+    */
+  def withReleaseVersionOverlayPreservingTransientSettings[A](
+      ctx: MonorepoContext
+  )(body: State => IO[A]): IO[A] =
+    withReleaseVersionOverlayUsing(
+      ctx,
+      SbtRuntime.appendTransientSettingsPreservingCurrent
+    )(body)
+
+  private def withReleaseVersionOverlayUsing[A](
+      ctx: MonorepoContext,
+      appendOverlay: (State, Seq[Setting[?]]) => State
+  )(body: State => IO[A]): IO[A] =
     releaseVersionOverlaySettings(ctx).flatMap { versionSettings =>
       if (versionSettings.isEmpty) body(ctx.state)
       else
-        IO.blocking(SbtRuntime.appendWithSession(ctx.state, versionSettings)).flatMap(body)
+        IO.blocking(appendOverlay(ctx.state, versionSettings)).flatMap(body)
     }
 
   private def resolveTentativeReleaseVersion(
@@ -332,6 +351,42 @@ private[monorepo] object MonorepoVersionWorkflow {
       )
     )
 
+  /** Rebuild the file-facing portion of a previously seeded version result without
+    * evaluating the release/next resolver tasks again.
+    *
+    * Validation seeds tentative version pairs into the context for downstream
+    * preconditions. Check-mode snapshot construction reuses that pair, while resolving
+    * the live version-file inputs and reading the file again so a late-bound file mapping
+    * or unreadable file still surfaces authoritatively.
+    */
+  def resolveProjectVersionsFromSeed(
+      ctx: MonorepoContext,
+      project: ProjectReleaseInfo
+  ): IO[Option[ResolvedProjectVersions]] =
+    project.resolvedVersions match {
+      case None                                => IO.pure(None)
+      case Some((releaseVersion, nextVersion)) =>
+        for {
+          versionInputs  <- MonorepoVersionFiles.resolveInputs(ctx.state, project.ref)
+          _              <- VersionWorkflow.ensureVersionFileExists(
+                              versionInputs.versionFile,
+                              missingVersionFileMessage(
+                                project,
+                                versionInputs.versionFile,
+                                includeConfigurationGuidance = false
+                              )
+                            )
+          currentVersion <- versionInputs.readVersion(versionInputs.versionFile)
+        } yield Some(
+          ResolvedProjectVersions(
+            versionFile = versionInputs.versionFile,
+            currentVersion = currentVersion,
+            releaseVersion = releaseVersion,
+            nextVersion = nextVersion
+          )
+        )
+    }
+
   def resolveProjectVersions(
       ctx: MonorepoContext,
       project: ProjectReleaseInfo,
@@ -422,8 +477,8 @@ private[monorepo] object MonorepoVersionWorkflow {
       // structure from `session.mergeSettings` — leaving subsequent project
       // writes (and the next-version phase) reading the build-default
       // resolver and writing to the wrong file. Hooks that already use
-      // `ReleaseSessionOps.appendSessionSettings` see the lift as a no-op
-      // (the same value re-installed in `rawAppend` resolves identically).
+      // `ReleaseSessionOps.appendSessionSettings` see the lift as a true no-op
+      // because their definitions already live in `session.mergeSettings`.
       newState <- IO.blocking {
                     val lifted = MonorepoVersionFiles.liftLateBoundVersioningSettings(ctx.state)
                     SbtRuntime.appendSessionSettings(

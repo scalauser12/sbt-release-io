@@ -2,11 +2,24 @@ package io.release.runtime.engine
 
 import cats.effect.IO
 import cats.effect.Ref
+import io.release.runtime.TrackedContextHandle
 import munit.CatsEffectSuite
 
 import LifecycleCompilerSpec.{ItemHook, SingleHook, TestConfig, TestContext}
 
 class LifecycleCompilerSpec extends CatsEffectSuite {
+
+  private def executePerItem(
+      step: ProcessStep.PerItem[TestContext, String],
+      ctx: TestContext,
+      item: String,
+      tracked: Boolean
+  ): IO[TestContext] =
+    if (tracked)
+      TrackedContextHandle.create(ctx).flatMap { handle =>
+        step.executeTracked(handle, item).flatMap(_ => handle.get)
+      }
+    else step.execute(ctx, item)
 
   private def singleHookPhase[I](
       phase: String,
@@ -356,6 +369,319 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
           step.execute(TestContext(gateOpen = true), "core").void
         }
       }
+  }
+
+  test("compile - frozen per-item gate can narrow an absent key in both execute paths") {
+    Ref.of[IO, List[String]](Nil).flatMap { events =>
+      Ref.of[IO, Int](0).flatMap { narrowCalls =>
+        val hook   = ItemHook(
+          name = "publish-check",
+          execute = (ctx, item) => events.update(_ :+ s"execute:$item").as(ctx)
+        )
+        val phases = Seq[LifecycleCompiler.Phase[
+          TestConfig,
+          TestContext,
+          String
+        ]](
+          LifecycleCompiler.perItemHookPhase(
+            phase = "before-publish",
+            resolveHooks = _.itemHooks,
+            gate = (_, _) => IO.pure(true),
+            nameOf = (h: ItemHook) => h.name,
+            executeOf = (h: ItemHook) => h.execute,
+            validateOf = (h: ItemHook) => h.validate,
+            freezeGateKey = Some((_, item) => item),
+            narrowExecute = Some((_, item) => narrowCalls.update(_ + 1).as(item == "validated")),
+            narrowOnMissingFrozenGate = true
+          )
+        )
+
+        LifecycleCompiler
+          .compile(TestConfig(itemHooks = Seq(hook)), phases)
+          .flatMap { steps =>
+            val step = ProcessStep
+              .fold[TestContext, String, ProcessStep.PerItem[TestContext, String]](steps.head)(
+                _ => fail("expected PerItem step"),
+                identity
+              )
+
+            for {
+              validated <- step.validate(TestContext(gateOpen = true), "validated")
+              direct    <- executePerItem(step, validated, "introduced-direct", tracked = false)
+              tracked   <- executePerItem(step, validated, "introduced-tracked", tracked = true)
+              recorded  <- events.get
+              calls     <- narrowCalls.get
+            } yield {
+              assertEquals(direct, validated)
+              assertEquals(tracked, validated)
+              assertEquals(recorded, Nil)
+              assertEquals(calls, 2)
+            }
+          }
+      }
+    }
+  }
+
+  test("compile - cached false skips without evaluating the missing-key narrow") {
+    Ref.of[IO, List[String]](Nil).flatMap { events =>
+      Ref.of[IO, Int](0).flatMap { narrowCalls =>
+        val hook   = ItemHook(
+          name = "publish-check",
+          execute = (ctx, item) => events.update(_ :+ s"execute:$item").as(ctx)
+        )
+        val phases = Seq[LifecycleCompiler.Phase[TestConfig, TestContext, String]](
+          LifecycleCompiler.perItemHookPhase(
+            phase = "before-publish",
+            resolveHooks = _.itemHooks,
+            gate = (_, _) => IO.pure(false),
+            nameOf = (h: ItemHook) => h.name,
+            executeOf = (h: ItemHook) => h.execute,
+            validateOf = (h: ItemHook) => h.validate,
+            freezeGateKey = Some((_, item) => item),
+            narrowExecute = Some((_, _) => narrowCalls.update(_ + 1).as(true)),
+            narrowOnMissingFrozenGate = true
+          )
+        )
+
+        LifecycleCompiler
+          .compile(TestConfig(itemHooks = Seq(hook)), phases)
+          .flatMap { steps =>
+            val step = ProcessStep
+              .fold[TestContext, String, ProcessStep.PerItem[TestContext, String]](steps.head)(
+                _ => fail("expected PerItem step"),
+                identity
+              )
+
+            for {
+              validated <- step.validate(TestContext(gateOpen = false), "core")
+              _         <- executePerItem(step, validated, "core", tracked = false)
+              _         <- executePerItem(step, validated, "core", tracked = true)
+              recorded  <- events.get
+              calls     <- narrowCalls.get
+            } yield {
+              assertEquals(recorded, Nil)
+              assertEquals(calls, 0)
+            }
+          }
+      }
+    }
+  }
+
+  test("compile - cached true evaluates the narrow normally in both execute paths") {
+    Ref.of[IO, List[String]](Nil).flatMap { events =>
+      Ref.of[IO, Boolean](false).flatMap { allow =>
+        Ref.of[IO, Int](0).flatMap { narrowCalls =>
+          val hook   = ItemHook(
+            name = "publish-check",
+            execute = (ctx, item) => events.update(_ :+ s"execute:$item").as(ctx)
+          )
+          val phases = Seq[LifecycleCompiler.Phase[TestConfig, TestContext, String]](
+            LifecycleCompiler.perItemHookPhase(
+              phase = "before-publish",
+              resolveHooks = _.itemHooks,
+              gate = (_, _) => IO.pure(true),
+              nameOf = (h: ItemHook) => h.name,
+              executeOf = (h: ItemHook) => h.execute,
+              validateOf = (h: ItemHook) => h.validate,
+              freezeGateKey = Some((_, item) => item),
+              narrowExecute = Some((_, _) => narrowCalls.update(_ + 1) *> allow.get),
+              narrowOnMissingFrozenGate = true
+            )
+          )
+
+          LifecycleCompiler
+            .compile(TestConfig(itemHooks = Seq(hook)), phases)
+            .flatMap { steps =>
+              val step = ProcessStep
+                .fold[TestContext, String, ProcessStep.PerItem[TestContext, String]](steps.head)(
+                  _ => fail("expected PerItem step"),
+                  identity
+                )
+
+              for {
+                validated <- step.validate(TestContext(gateOpen = true), "core")
+                _         <- executePerItem(step, validated, "core", tracked = false)
+                _         <- executePerItem(step, validated, "core", tracked = true)
+                _         <- allow.set(true)
+                _         <- executePerItem(step, validated, "core", tracked = false)
+                _         <- executePerItem(step, validated, "core", tracked = true)
+                recorded  <- events.get
+                calls     <- narrowCalls.get
+              } yield {
+                assertEquals(recorded, List("execute:core", "execute:core"))
+                assertEquals(calls, 4)
+              }
+            }
+        }
+      }
+    }
+  }
+
+  test("compile - absent-key narrow does not cache a synthetic false decision") {
+    Ref.of[IO, Boolean](false).flatMap { allow =>
+      val hook   = ItemHook(name = "publish-check")
+      val phases = Seq[LifecycleCompiler.Phase[TestConfig, TestContext, String]](
+        LifecycleCompiler.perItemHookPhase(
+          phase = "before-publish",
+          resolveHooks = _.itemHooks,
+          gate = (_, _) => IO.pure(true),
+          nameOf = (h: ItemHook) => h.name,
+          executeOf = (h: ItemHook) => h.execute,
+          validateOf = (h: ItemHook) => h.validate,
+          freezeGateKey = Some((_, item) => item),
+          narrowExecute = Some((_, _) => allow.get),
+          narrowOnMissingFrozenGate = true
+        )
+      )
+
+      LifecycleCompiler
+        .compile(TestConfig(itemHooks = Seq(hook)), phases)
+        .flatMap { steps =>
+          val step     = ProcessStep
+            .fold[TestContext, String, ProcessStep.PerItem[TestContext, String]](steps.head)(
+              _ => fail("expected PerItem step"),
+              identity
+            )
+          val expected =
+            "Frozen gate decision missing for key 'introduced'; validate must run before execute when freezeGateKey is set"
+
+          for {
+            validated <- step.validate(TestContext(gateOpen = true), "validated")
+            _         <- executePerItem(step, validated, "introduced", tracked = false)
+            _         <- executePerItem(step, validated, "introduced-tracked", tracked = true)
+            _         <- allow.set(true)
+            direct    <- executePerItem(step, validated, "introduced", tracked = false).attempt
+            tracked   <- executePerItem(
+                           step,
+                           validated,
+                           "introduced-tracked",
+                           tracked = true
+                         ).attempt
+          } yield {
+            assertEquals(direct.left.map(_.getMessage), Left(expected))
+            assertEquals(
+              tracked.left.map(_.getMessage),
+              Left(expected.replace("introduced'", "introduced-tracked'"))
+            )
+          }
+        }
+    }
+  }
+
+  test("compile - frozen per-item validation resolves its cache key and decision together") {
+    Ref.of[IO, List[String]](Nil).flatMap { events =>
+      val hook   = ItemHook(
+        name = "publish-check",
+        execute = (ctx, item) => events.update(_ :+ s"execute:$item").as(ctx),
+        validate = (ctx, item) => events.update(_ :+ s"validate:${ctx.gateKey}:$item")
+      )
+      val phases = Seq[LifecycleCompiler.Phase[TestConfig, TestContext, String]](
+        LifecycleCompiler.perItemHookPhase(
+          phase = "before-publish",
+          resolveHooks = _.itemHooks,
+          gate = (_, _) => events.update(_ :+ "unexpected-gate").as(false),
+          nameOf = (h: ItemHook) => h.name,
+          executeOf = (h: ItemHook) => h.execute,
+          validateOf = (h: ItemHook) => h.validate,
+          freezeGateKey = Some((_, item) => item),
+          freezeGateValidation = Some((ctx, _) =>
+            events
+              .update(_ :+ "validate-key-and-decision")
+              .as(
+                LifecycleCompiler.FrozenGateValidation(
+                  ctx.copy(gateKey = "validated-context"),
+                  "execute",
+                  decision = true
+                )
+              )
+          )
+        )
+      )
+
+      LifecycleCompiler
+        .compile(TestConfig(itemHooks = Seq(hook)), phases)
+        .flatMap { steps =>
+          val step = ProcessStep
+            .fold[TestContext, String, ProcessStep.PerItem[TestContext, String]](steps.head)(
+              _ => fail("expected PerItem step"),
+              identity
+            )
+
+          for {
+            validated <- step.validate(TestContext(gateOpen = true), "validation")
+            direct    <- executePerItem(step, validated, "execute", tracked = false)
+            tracked   <- executePerItem(step, validated, "execute", tracked = true)
+            recorded  <- events.get
+          } yield {
+            assertEquals(validated.gateKey, "validated-context")
+            assertEquals(direct, validated)
+            assertEquals(tracked, validated)
+            assertEquals(
+              recorded,
+              List(
+                "validate-key-and-decision",
+                "validate:validated-context:validation",
+                "execute:execute",
+                "execute:execute"
+              )
+            )
+          }
+        }
+    }
+  }
+
+  test("compile - frozen per-item validation carries updated context when the gate is closed") {
+    Ref.of[IO, List[String]](Nil).flatMap { events =>
+      val hook   = ItemHook(
+        name = "publish-check",
+        execute = (ctx, _) => events.update(_ :+ "unexpected-execute").as(ctx),
+        validate = (_, _) => events.update(_ :+ "unexpected-validate")
+      )
+      val phases = Seq[LifecycleCompiler.Phase[TestConfig, TestContext, String]](
+        LifecycleCompiler.perItemHookPhase(
+          phase = "before-publish",
+          resolveHooks = _.itemHooks,
+          gate = (_, _) => events.update(_ :+ "unexpected-gate").as(true),
+          nameOf = (h: ItemHook) => h.name,
+          executeOf = (h: ItemHook) => h.execute,
+          validateOf = (h: ItemHook) => h.validate,
+          freezeGateKey = Some((_, item) => item),
+          freezeGateValidation = Some((ctx, _) =>
+            events
+              .update(_ :+ "validate-key-and-decision")
+              .as(
+                LifecycleCompiler.FrozenGateValidation(
+                  ctx.copy(gateKey = "carried-context"),
+                  "execute",
+                  decision = false
+                )
+              )
+          )
+        )
+      )
+
+      LifecycleCompiler
+        .compile(TestConfig(itemHooks = Seq(hook)), phases)
+        .flatMap { steps =>
+          val step = ProcessStep
+            .fold[TestContext, String, ProcessStep.PerItem[TestContext, String]](steps.head)(
+              _ => fail("expected PerItem step"),
+              identity
+            )
+
+          for {
+            validated <- step.validate(TestContext(gateOpen = true), "validation")
+            direct    <- executePerItem(step, validated, "execute", tracked = false)
+            tracked   <- executePerItem(step, validated, "execute", tracked = true)
+            recorded  <- events.get
+          } yield {
+            assertEquals(validated.gateKey, "carried-context")
+            assertEquals(direct, validated)
+            assertEquals(tracked, validated)
+            assertEquals(recorded, List("validate-key-and-decision"))
+          }
+        }
+    }
   }
 }
 

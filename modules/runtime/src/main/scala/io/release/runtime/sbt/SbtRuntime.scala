@@ -75,6 +75,55 @@ private[release] object SbtRuntime {
   def appendSessionSettings(state: State, settings: Seq[Setting[?]]): State =
     sbt.ReleaseIOLoadCompatBridge.appendSessionSettings(state, settings)
 
+  /** Promote transient settings installed by [[appendWithSession]] into
+    * `session.rawAppend`, together with any transient settings they depend on.
+    *
+    * `Extracted.appendWithSession` rebuilds `structure.settings` as
+    * `session.mergeSettings ++ transformedOverlay` without recording the
+    * overlay in the session. This helper identifies that overlay suffix,
+    * starts from definitions whose attribute key is in `keys`, follows their
+    * effective setting dependencies through sbt's scope delegates, and
+    * persists only that dependency closure. Preserving the original
+    * [[Setting]] definitions keeps `.value` dependencies live instead of
+    * freezing their currently-resolved values.
+    *
+    * Returns `state` unchanged when no requested transient definition exists.
+    */
+  def promoteTransientSettingsByKey(
+      state: State,
+      keys: Seq[AttributeKey[?]]
+  ): State =
+    sbt.ReleaseIOLoadCompatBridge.promoteTransientSettingsByKey(state, keys)
+
+  /** Rebuild a modified session while retaining structure-only settings that
+    * are outside `transientStrip`. The bridge keeps the resulting structure in
+    * canonical persistent-prefix/transient-suffix order and refreshes its
+    * private structure marker.
+    */
+  def rebuildSessionPreservingTransientSettings(
+      state: State,
+      rawAppendStrip: Setting[?] => Boolean,
+      addToRawAppend: Seq[Setting[?]],
+      transientStrip: Setting[?] => Boolean
+  ): State =
+    sbt.ReleaseIOLoadCompatBridge.rebuildSessionPreservingTransientSettings(
+      state,
+      rawAppendStrip,
+      addToRawAppend,
+      transientStrip
+    )
+
+  /** Append a transient overlay after the current structure-only suffix while
+    * keeping `session.rawAppend` unchanged. This preserves hook-installed
+    * transient definitions and gives the new overlay normal last-write
+    * precedence.
+    */
+  def appendTransientSettingsPreservingCurrent(
+      state: State,
+      settings: Seq[Setting[?]]
+  ): State =
+    sbt.ReleaseIOLoadCompatBridge.appendTransientSettingsPreservingCurrent(state, settings)
+
   /** Strip every entry whose `AttributeKey` is in `keys` from
     * `session.rawAppend`, then reapply the resulting structure.
     *

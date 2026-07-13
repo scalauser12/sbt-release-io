@@ -1,0 +1,10 @@
+target/
+project/target/
+project/project/
+global/
+*.class
+*.log
+published-scala
+publish-count
+after-publish-count
+after-publish-scala

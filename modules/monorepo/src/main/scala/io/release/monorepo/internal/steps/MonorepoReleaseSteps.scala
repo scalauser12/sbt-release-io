@@ -69,9 +69,13 @@ private[monorepo] object MonorepoReleaseSteps {
   val tagReleasesPerProject: ProjectStep =
     MonorepoVcsSteps.tagReleasesPerProject
 
-  /** Early per-project tag-conflict probe aligned with the `tag-preflight`
-    * lifecycle phase. Mirrors core's `tag-preflight`.
+  /** Early batch tag-conflict probe aligned with the `tag-preflight`
+    * lifecycle phase. Internally preserves per-project failure isolation.
     */
-  val tagPreflight: ProjectStep =
+  val tagPreflight: GlobalStep =
     MonorepoVcsSteps.tagPreflight
+
+  /** Post-`beforeTag` batch-name guard that runs before the first tag side effect. */
+  val planTagNames: GlobalStep =
+    MonorepoVcsSteps.planTagNames
 }

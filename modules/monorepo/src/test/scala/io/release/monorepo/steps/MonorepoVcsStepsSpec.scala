@@ -1,6 +1,7 @@
 package io.release.monorepo.internal.steps
 
 import cats.effect.IO
+import cats.effect.Ref
 import cats.effect.Resource
 import io.release.ReleaseManifestMetadata
 import io.release.ReleaseManifestMetadata.releaseIOInternalReleaseHash
@@ -18,6 +19,7 @@ import io.release.monorepo.internal.steps.*
 import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.ReleaseDecisionDefaults
 import io.release.runtime.ReleaseLogPrefixes
+import io.release.vcs.InvalidTagNameException
 import io.release.vcs.TagConflictResolver
 import io.release.vcs.Vcs
 import munit.CatsEffectSuite
@@ -32,6 +34,7 @@ import sbt.settingKey
 
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 class MonorepoVcsStepsSpec extends CatsEffectSuite {
   private val fixtureNonce = settingKey[String]("Unique nonce for monorepo VCS manifest tests")
@@ -367,6 +370,304 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
           )
         )
       }
+    }
+  }
+
+  test("preflightTags - resolve the commit target once for the whole project batch") {
+    twoProjectTagContextResource.use { case (_, _, _, ctx) =>
+      for {
+        calls    <- Ref.of[IO, Int](0)
+        outcomes <-
+          MonorepoVcsSteps.preflightTags(
+            ctx,
+            interactive = false,
+            vcs =>
+              calls.update(_ + 1) *>
+                vcs.currentHash.map(TagConflictResolver.PreflightCommitTarget.ExactCommit(_))
+          )
+        count    <- calls.get
+      } yield {
+        assertEquals(outcomes.map(_.projectName), Seq("core", "api"))
+        assertEquals(count, 1)
+      }
+    }
+  }
+
+  test("tagPreflight.execute - render release writes once per project, not once per tag") {
+    twoProjectTagContextResource.use { case (_, _, _, baseCtx) =>
+      val renderCalls  = new AtomicInteger(0)
+      val countedState = TestSupport.appendSessionSettings(
+        baseCtx.state,
+        Seq(
+          MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningFileContents := {
+            (_: File, version: String) =>
+              IO {
+                renderCalls.incrementAndGet()
+                s"""version := "$version"""" + "\n"
+              }
+          }
+        )
+      )
+
+      MonorepoVcsSteps.tagPreflight.execute(baseCtx.withState(countedState)).map { result =>
+        assert(!result.failed)
+        assertEquals(renderCalls.get(), 2)
+      }
+    }
+  }
+
+  test("preflightTags - reject duplicate rendered names before probing tag conflicts") {
+    twoProjectTagContextResource.use { case (repo, _, _, baseCtx) =>
+      val duplicateState = TestSupport.appendSessionSettings(
+        baseCtx.state,
+        Seq(
+          MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsTagName := {
+            (_: String, _: String) => "release-v1"
+          }
+        )
+      )
+      val duplicateCtx   = baseCtx.withState(duplicateState)
+
+      TestAssertions
+        .assertFailure[IllegalStateException, Seq[MonorepoVcsSteps.PreflightTagOutcome]](
+          MonorepoVcsSteps.preflightTags(duplicateCtx, interactive = false)
+        ) { err =>
+          assert(err.getMessage.contains("releaseIOMonorepoVcsTagName"))
+          assert(err.getMessage.contains("[release-v1] -> [core, api]"))
+        }
+        .flatMap(_ => IO.blocking(TestSupport.runGit(repo, "tag", "--list").trim))
+        .map(tagList => assertEquals(tagList, ""))
+    }
+  }
+
+  test("duplicateTagGroups - preserve first-tag and selected-project order") {
+    IO {
+      val entries = Vector(
+        "core" -> "z-release",
+        "api"  -> "a-release",
+        "docs" -> "z-release",
+        "cli"  -> "a-release"
+      )
+
+      assertEquals(
+        MonorepoVcsSteps.duplicateTagGroups(entries),
+        Vector(
+          "z-release" -> Vector("core", "docs"),
+          "a-release" -> Vector("api", "cli")
+        )
+      )
+    }
+  }
+
+  test("duplicateTagGroups - keep tag-name comparison exact and case-sensitive") {
+    IO {
+      assertEquals(
+        MonorepoVcsSteps.duplicateTagGroups(
+          Vector("core" -> "Release-v1", "api" -> "release-v1")
+        ),
+        Vector.empty
+      )
+    }
+  }
+
+  test("duplicateTagGroups - handle a large unique batch without duplicate rescans") {
+    IO {
+      val entries = Vector.tabulate(4096)(index => s"project-$index" -> s"tag-$index")
+      assertEquals(MonorepoVcsSteps.duplicateTagGroups(entries), Vector.empty)
+    }
+  }
+
+  test("preflightTags - reject deterministic retries that resolve to the same tag") {
+    twoProjectTagContextResource.use { case (repo, _, _, baseCtx) =>
+      val ctx = withFlags(
+        baseCtx,
+        useDefaults = false,
+        tagExistsAnswer = Some("shared-retry-v1")
+      )
+
+      IO.blocking {
+        TestSupport.runGit(repo, "tag", "core-v1.0.0")
+        TestSupport.runGit(repo, "tag", "api-v2.0.0")
+      } *> TestAssertions
+        .assertFailure[IllegalStateException, Seq[MonorepoVcsSteps.PreflightTagOutcome]](
+          MonorepoVcsSteps.preflightTags(ctx, interactive = false)
+        ) { err =>
+          assert(err.getMessage.contains("[shared-retry-v1] -> [core, api]"))
+        }
+    }
+  }
+
+  test("planTagNames.execute - reject post-hook duplicates before the first tag") {
+    twoProjectTagContextResource.use { case (repo, _, _, baseCtx) =>
+      val duplicateState = TestSupport.appendSessionSettings(
+        baseCtx.state,
+        Seq(
+          MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsTagName := {
+            (_: String, _: String) => "post-hook-release"
+          }
+        )
+      )
+
+      TestAssertions
+        .assertFailure[IllegalStateException, MonorepoContext](
+          MonorepoVcsSteps.planTagNames.execute(baseCtx.withState(duplicateState))
+        ) { err =>
+          assert(err.getMessage.contains("[post-hook-release] -> [core, api]"))
+        }
+        .flatMap(_ => IO.blocking(TestSupport.runGit(repo, "tag", "--list").trim))
+        .map(tagList => assertEquals(tagList, ""))
+    }
+  }
+
+  test("planTagNames.execute - validate every post-hook name before the first tag") {
+    twoProjectTagContextResource.use { case (repo, core, api, baseCtx) =>
+      val invalidState = TestSupport.appendSessionSettings(
+        baseCtx.state,
+        Seq(
+          MonorepoReleasePlugin.autoImport.releaseIOMonorepoVcsTagName := {
+            (projectName: String, version: String) =>
+              if (projectName == "api") "bad tag" else s"$projectName-v$version"
+          }
+        )
+      )
+      val attempt      = for {
+        planned    <- MonorepoVcsSteps.planTagNames.execute(baseCtx.withState(invalidState))
+        taggedCore <- MonorepoVcsSteps.tagReleasesPerProject.execute(planned, core)
+        _          <- MonorepoVcsSteps.tagReleasesPerProject.execute(taggedCore, api)
+      } yield ()
+
+      TestAssertions
+        .assertFailure[InvalidTagNameException, Unit](attempt) { err =>
+          assert(err.getMessage.contains("bad tag"))
+        }
+        .flatMap(_ => IO.blocking(TestSupport.runGit(repo, "tag", "--list").trim))
+        .map(tagList => assertEquals(tagList, ""))
+    }
+  }
+
+  test("planTagNames.execute - require an initialized VCS for a non-empty batch") {
+    twoProjectTagContextResource.use { case (_, _, _, baseCtx) =>
+      TestAssertions.assertFailure[IllegalStateException, MonorepoContext](
+        MonorepoVcsSteps.planTagNames.execute(baseCtx.copy(vcs = None))
+      ) { err =>
+        assertEquals(
+          err.getMessage,
+          "VCS not initialized. Ensure initializeVcs runs before this step."
+        )
+      }
+    }
+  }
+
+  test("planTagNames.execute - allow an empty batch without an initialized VCS") {
+    twoProjectTagContextResource.use { case (_, _, _, baseCtx) =>
+      val emptyCtx = baseCtx.copy(vcs = None, projects = Seq.empty)
+      MonorepoVcsSteps.planTagNames
+        .execute(emptyCtx)
+        .map(result => assert(result eq emptyCtx))
+    }
+  }
+
+  test("tag-name plan - index planned and previously used reservations") {
+    twoProjectTagContextResource.use { case (_, core, api, baseCtx) =>
+      val planned = baseCtx.withPlannedTagNames(
+        Seq(
+          MonorepoContext.TagPlanEntry(core.ref, core.name, "core-v1.0.0"),
+          MonorepoContext.TagPlanEntry(api.ref, api.name, "api-v2.0.0")
+        )
+      )
+      val used    = planned.recordResolvedTagName(core.ref, "core-retry-v1")
+      val moved   = used.recordResolvedTagName(core.ref, "core-retry-v2")
+
+      IO {
+        assertEquals(
+          planned.tagReservationConflicts(api.ref, "core-v1.0.0"),
+          Vector("core")
+        )
+        assertEquals(
+          used.tagReservationConflicts(api.ref, "core-retry-v1"),
+          Vector("core")
+        )
+        assertEquals(used.tagReservationConflicts(core.ref, "core-retry-v1"), Vector.empty)
+        assertEquals(moved.tagReservationConflicts(api.ref, "core-retry-v1"), Vector.empty)
+        assertEquals(
+          moved.tagReservationConflicts(api.ref, "core-retry-v2"),
+          Vector("core")
+        )
+      }
+    }
+  }
+
+  test("tag-name plan - de-duplicate and order reverse-index owners deterministically") {
+    twoProjectTagContextResource.use { case (_, core, api, baseCtx) =>
+      val planned   = baseCtx.withPlannedTagNames(
+        Seq(
+          MonorepoContext.TagPlanEntry(core.ref, core.name, "core-v1.0.0"),
+          MonorepoContext.TagPlanEntry(api.ref, api.name, "api-v2.0.0")
+        )
+      )
+      val sameOwner = planned.recordResolvedTagName(core.ref, "core-v1.0.0")
+      val twoOwners = sameOwner.recordResolvedTagName(api.ref, "core-v1.0.0")
+      val observer  = ProjectRef(core.ref.build, "observer")
+
+      IO {
+        assertEquals(
+          sameOwner.tagReservationConflicts(api.ref, "core-v1.0.0"),
+          Vector("core")
+        )
+        assertEquals(
+          twoOwners.tagReservationConflicts(observer, "core-v1.0.0"),
+          Vector("core", "api")
+        )
+      }
+    }
+  }
+
+  test("tag-name plan - preserve direct-step fallback when no plan exists") {
+    twoProjectTagContextResource.use { case (_, core, api, baseCtx) =>
+      IO {
+        assertEquals(baseCtx.tagReservationConflicts(core.ref, "api-v2.0.0"), Vector.empty)
+        assert(baseCtx.recordResolvedTagName(api.ref, "api-v2.0.0") eq baseCtx)
+      }
+    }
+  }
+
+  test("tagReleasesPerProject.execute - reject a retry name reserved for another project") {
+    twoProjectTagContextResource.use { case (repo, core, _, baseCtx) =>
+      for {
+        planned <- MonorepoVcsSteps.planTagNames.execute(baseCtx)
+        _       <- IO.blocking(TestSupport.runGit(repo, "tag", "core-v1.0.0"))
+        ctx      = withFlags(
+                     planned,
+                     useDefaults = false,
+                     tagExistsAnswer = Some("api-v2.0.0")
+                   )
+        _       <- TestAssertions.assertFailure[IllegalStateException, MonorepoContext](
+                     MonorepoVcsSteps.tagReleasesPerProject.execute(ctx, core)
+                   ) { err =>
+                     assert(err.getMessage.contains("reserves it for [api]"))
+                   }
+        apiTag  <- IO.blocking(TestSupport.runGit(repo, "tag", "--list", "api-v2.0.0").trim)
+      } yield assertEquals(apiTag, "")
+    }
+  }
+
+  test("tagReleasesPerProject.execute - reject a retry name already used by another project") {
+    twoProjectTagContextResource.use { case (repo, core, api, baseCtx) =>
+      for {
+        planned <- MonorepoVcsSteps.planTagNames.execute(baseCtx)
+        _       <- IO.blocking(TestSupport.runGit(repo, "tag", "api-v2.0.0"))
+        ctx      = withFlags(
+                     planned.recordResolvedTagName(core.ref, "core-retry-v1"),
+                     useDefaults = false,
+                     tagExistsAnswer = Some("core-retry-v1")
+                   )
+        _       <- TestAssertions.assertFailure[IllegalStateException, MonorepoContext](
+                     MonorepoVcsSteps.tagReleasesPerProject.execute(ctx, api)
+                   ) { err =>
+                     assert(err.getMessage.contains("reserves it for [core]"))
+                   }
+        retry   <- IO.blocking(TestSupport.runGit(repo, "tag", "--list", "core-retry-v1").trim)
+      } yield assertEquals(retry, "")
     }
   }
 

@@ -1,0 +1,12 @@
+# A tag-changing beforeTag hook disables the early preflight and gives the later
+# project an invalid, unique tag. The late batch planner must validate every name
+# before the valid first project's tag can be created.
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt project/plugins.sbt core/version.sbt api/version.sbt
+$ exec git commit -m "Initial commit"
+
+-> releaseIOMonorepo core api with-defaults release-version core=1.0.0 next-version core=1.1.0-SNAPSHOT release-version api=1.0.0 next-version api=1.1.0-SNAPSHOT
+
+> checkInvalidTagBatchAbort

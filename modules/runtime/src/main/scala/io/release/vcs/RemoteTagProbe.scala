@@ -87,14 +87,18 @@ private[release] object RemoteTagProbe {
 
   /** Keep-path probe: the release will KEEP an existing local tag (no new ref
     * created locally), but the final atomic push still advertises it with a
-    * non-force `refs/tags/X:refs/tags/X` update. That update is rejected only
-    * when the remote already holds the tag at a DIFFERENT commit, so — unlike
-    * [[probeForCreate]] — a mere existence check is not enough: a same-commit
-    * remote tag is a harmless no-op push and must not abort the keep.
+    * non-force `refs/tags/X:refs/tags/X` update. That update is rejected when
+    * the remote stores a DIFFERENT ref object, so — unlike [[probeForCreate]] —
+    * a mere existence or peeled-commit check is not enough. Two annotated tag
+    * objects can peel to the same commit while still conflicting on push.
     *
-    * Aborts (before `publish-artifacts`) only when the remote tag exists at a
-    * commit other than `expectedCommitHash`. Absent / same-commit proceed
-    * silently; an unavailable remote degrades to a warning.
+    * Local ref validation is unconditional: an authoritative missing local ref
+    * aborts before publish even when push is disabled, declined, or has no upstream,
+    * because continuing would attribute artifacts to a tag that no longer exists.
+    * Remote probing remains conditional. When it runs, differing exact local and
+    * remote ref hashes abort; an absent / identical remote ref proceeds silently,
+    * and an unavailable remote degrades to a warning. `expectedCommitHash` remains
+    * a compatibility fallback only for VCS adapters without an exact local-ref lookup.
     */
   def probeForKeep[C <: ReleaseCtx { type Self = C }](
       ctx: C,
@@ -106,14 +110,35 @@ private[release] object RemoteTagProbe {
       label: Option[String],
       pushConfigured: Boolean
   ): IO[Unit] =
-    if (shouldSkip(ctx, pushConfigured)) IO.unit
-    else runKeepProbe(ctx, vcs, tagName, expectedCommitHash, commandName, logPrefix, label)
+    resolveLocalKeepRef(vcs, tagName, expectedCommitHash, commandName, label).flatMap {
+      expectedRefHash =>
+        if (shouldSkip(ctx, pushConfigured)) IO.unit
+        else runKeepProbe(ctx, vcs, tagName, expectedRefHash, commandName, logPrefix, label)
+    }
+
+  private def resolveLocalKeepRef(
+      vcs: Vcs,
+      tagName: String,
+      expectedCommitHash: String,
+      commandName: String,
+      label: Option[String]
+  ): IO[String] =
+    vcs.localTagRef(tagName).flatMap {
+      case LocalTagRef.At(refHash) => IO.pure(refHash)
+      case LocalTagRef.Unsupported => IO.pure(expectedCommitHash)
+      case LocalTagRef.Absent      =>
+        IO.raiseError(
+          new IllegalStateException(
+            missingLocalKeepTagMessage(tagName, commandName, label)
+          )
+        )
+    }
 
   private def runKeepProbe[C <: ReleaseCtx { type Self = C }](
       ctx: C,
       vcs: Vcs,
       tagName: String,
-      expectedCommitHash: String,
+      expectedRefHash: String,
       commandName: String,
       logPrefix: String,
       label: Option[String]
@@ -124,11 +149,11 @@ private[release] object RemoteTagProbe {
         for {
           remote  <- vcs.trackingRemote
           timeout <- loadTimeout(ctx.state)
-          result  <- vcs.remoteTagCommitWithTimeout(remote, tagName, timeout)
+          result  <- vcs.remoteTagRefWithTimeout(remote, tagName, timeout)
           _       <- handleKeepResult(
                        ctx,
                        tagName,
-                       expectedCommitHash,
+                       expectedRefHash,
                        remote,
                        commandName,
                        logPrefix,
@@ -138,18 +163,29 @@ private[release] object RemoteTagProbe {
         } yield ()
     }
 
+  private def missingLocalKeepTagMessage(
+      tagName: String,
+      commandName: String,
+      label: Option[String]
+  ): String =
+    s"Tag [$tagName]${formatLabel(label)} was selected to KEEP, but its local ref " +
+      s"[refs/tags/$tagName] no longer exists. Aborting before publish because continuing " +
+      "would record release artifacts and metadata for a nonexistent tag. " +
+      "Recreate the tag or choose a new tag, then " +
+      s"re-run the release. Use `$commandName help` for tag conflict options."
+
   private def handleKeepResult[C <: ReleaseCtx { type Self = C }](
       ctx: C,
       tagName: String,
-      expectedCommitHash: String,
+      expectedRefHash: String,
       remote: String,
       commandName: String,
       logPrefix: String,
       label: Option[String],
-      result: RemoteTagCommit
+      result: RemoteTagRef
   ): IO[Unit] =
     result match {
-      case RemoteTagCommit.At(remoteHash) if remoteHash != expectedCommitHash =>
+      case RemoteTagRef.At(remoteHash) if remoteHash != expectedRefHash =>
         IO.raiseError(
           new IllegalStateException(
             keepConflictMessage(
@@ -157,14 +193,14 @@ private[release] object RemoteTagProbe {
               remote,
               commandName,
               label,
-              expectedCommitHash,
+              expectedRefHash,
               remoteHash
             )
           )
         )
-      // Same commit → the non-force push is a no-op. Absent → the push creates it.
-      case RemoteTagCommit.At(_) | RemoteTagCommit.Absent                     => IO.unit
-      case RemoteTagCommit.Unavailable                                        =>
+      // Identical ref object → the non-force push is a no-op. Absent → it creates the ref.
+      case RemoteTagRef.At(_) | RemoteTagRef.Absent                     => IO.unit
+      case RemoteTagRef.Unavailable                                     =>
         IO.blocking(
           ctx.state.log.warn(
             s"$logPrefix Could not query remote [$remote] for kept " +
@@ -178,12 +214,14 @@ private[release] object RemoteTagProbe {
       remote: String,
       commandName: String,
       label: Option[String],
-      expectedCommitHash: String,
+      expectedRefHash: String,
       remoteHash: String
   ): String =
-    s"Tag [$tagName]${formatLabel(label)} would be kept at commit [$expectedCommitHash], but " +
-      s"remote [$remote] already has it at a different commit [$remoteHash]. The release would " +
-      s"push it with a non-force update, which the remote rejects — so publish would run and the " +
+    s"Tag [$tagName]${formatLabel(label)} would keep local tag ref object [$expectedRefHash], but " +
+      s"remote [$remote] stores a different tag ref object [$remoteHash]. " +
+      s"This can happen even when both annotated tags point to the same commit. " +
+      s"The release would push it with a non-force " +
+      s"update, which the remote rejects — so publish would run and the " +
       s"push would then fail. Force-push the tag (`git push $remote --force refs/tags/$tagName`) " +
       s"or pick a new tag, then re-run the release. Use `$commandName help` for tag conflict options."
 

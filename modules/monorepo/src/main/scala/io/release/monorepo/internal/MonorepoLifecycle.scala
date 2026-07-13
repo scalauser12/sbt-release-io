@@ -7,6 +7,7 @@ import io.release.monorepo.internal.steps.MonorepoPublishSteps
 import io.release.monorepo.internal.steps.MonorepoReleaseSteps
 import io.release.runtime.HookPhases
 import io.release.runtime.engine.LifecycleCompiler
+import io.release.runtime.engine.LifecycleCompiler.FrozenGateValidation
 import io.release.runtime.preflight.PreflightPhaseGroups
 import io.release.runtime.workflow.DecisionResolver
 import sbt.*
@@ -59,8 +60,12 @@ private[release] object MonorepoLifecycle {
       gate: (MonorepoContext, ProjectReleaseInfo) => IO[Boolean] = (_, _) => IO.pure(true),
       crossBuild: Boolean = false,
       freezeGateKey: Option[(MonorepoContext, ProjectReleaseInfo) => String] = None,
+      freezeGateValidation: Option[
+        (MonorepoContext, ProjectReleaseInfo) => IO[FrozenGateValidation[MonorepoContext]]
+      ] = None,
       enabled: MonorepoHookConfiguration => Boolean = _ => true,
-      narrowExecute: Option[(MonorepoContext, ProjectReleaseInfo) => IO[Boolean]] = None
+      narrowExecute: Option[(MonorepoContext, ProjectReleaseInfo) => IO[Boolean]] = None,
+      narrowOnMissingFrozenGate: Boolean = false
   ): Phase =
     LifecycleCompiler.perItemHookPhase(
       phase = phase,
@@ -73,8 +78,10 @@ private[release] object MonorepoLifecycle {
       validateOf = (hook: MonorepoProjectHookIO) => hook.validate,
       crossBuild = crossBuild,
       freezeGateKey = freezeGateKey,
+      freezeGateValidation = freezeGateValidation,
       enabled = enabled,
-      narrowExecute = narrowExecute
+      narrowExecute = narrowExecute,
+      narrowOnMissingFrozenGate = narrowOnMissingFrozenGate
     )
 
   private val publishGate: (MonorepoContext, ProjectReleaseInfo) => IO[
@@ -105,11 +112,7 @@ private[release] object MonorepoLifecycle {
     * validate-before-execute contract for `releaseIOMonorepo check`.
     */
   private val afterPublishNarrow: (MonorepoContext, ProjectReleaseInfo) => IO[Boolean] =
-    (ctx, project) =>
-      IO.pure(
-        ctx.publishExecutedKeys
-          .exists(_.contains(MonorepoPublishSteps.publishGateKey(ctx, project)))
-      )
+    (ctx, project) => IO.blocking(MonorepoPublishSteps.didPublishForAfterHook(ctx, project))
 
   /** Execute-time AND condition for the global `before-push` hook: fires only
     * when the push decision is not already a deterministic decline. Mirrors the
@@ -200,6 +203,7 @@ private[release] object MonorepoLifecycle {
     builtIn(MonorepoReleaseSteps.commitReleaseVersions),
     globalHookPhase(HookPhases.AfterReleaseCommit, _.afterReleaseCommitHooks),
     projectHookPhase(HookPhases.BeforeTag, _.beforeTagHooks, enabled = _.enableTagging),
+    builtIn(MonorepoReleaseSteps.planTagNames, _.enableTagging),
     builtIn(MonorepoReleaseSteps.tagReleasesPerProject, _.enableTagging),
     projectHookPhase(HookPhases.AfterTag, _.afterTagHooks, enabled = _.enableTagging),
     projectHookPhase(
@@ -208,8 +212,10 @@ private[release] object MonorepoLifecycle {
       gate = publishGate,
       crossBuild = MonorepoReleaseSteps.publishArtifacts.enableCrossBuild,
       freezeGateKey = Some(MonorepoPublishSteps.publishGateKey),
+      freezeGateValidation = Some(MonorepoPublishSteps.beforePublishGateValidation),
       enabled = _.enablePublish,
-      narrowExecute = Some(beforePublishNarrow)
+      narrowExecute = Some(beforePublishNarrow),
+      narrowOnMissingFrozenGate = true
     ),
     builtIn(MonorepoReleaseSteps.publishArtifacts, _.enablePublish),
     projectHookPhase(
@@ -217,9 +223,11 @@ private[release] object MonorepoLifecycle {
       _.afterPublishHooks,
       gate = publishGate,
       crossBuild = MonorepoReleaseSteps.publishArtifacts.enableCrossBuild,
-      freezeGateKey = Some(MonorepoPublishSteps.publishGateKey),
+      freezeGateKey = Some(MonorepoPublishSteps.afterPublishGateKey),
+      freezeGateValidation = Some(MonorepoPublishSteps.afterPublishGateValidation),
       enabled = _.enablePublish,
-      narrowExecute = Some(afterPublishNarrow)
+      narrowExecute = Some(afterPublishNarrow),
+      narrowOnMissingFrozenGate = true
     ),
     projectHookPhase(
       HookPhases.BeforeNextVersionWrite,

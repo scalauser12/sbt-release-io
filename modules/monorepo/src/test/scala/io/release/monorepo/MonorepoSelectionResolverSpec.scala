@@ -262,6 +262,38 @@ class MonorepoSelectionResolverSpec extends CatsEffectSuite {
     }
   }
 
+  test("resolveLoadedBaseDirs - use live baseDirectory for every loaded project") {
+    MonorepoSpecSupport
+      .loadedFixtureResource("monorepo-selection-all-loaded-base-dirs") { dir =>
+        val declaredBase = new File(dir, "declared")
+        val liveBase     = new File(dir, "live")
+        declaredBase.mkdirs()
+        liveBase.mkdirs()
+
+        Seq(
+          MonorepoSpecSupport.monorepoRootProject(dir, projectIds = Seq("relocated")),
+          MonorepoSpecSupport.versionedProject(
+            "relocated",
+            declaredBase,
+            settings = Seq(sbt.Keys.baseDirectory := liveBase)
+          )
+        )
+      }
+      .use { fixture =>
+        MonorepoProjectResolver.resolveLoadedBaseDirs(fixture.state).map { baseDirs =>
+          assertEquals(baseDirs.keySet, fixture.refsById.values.toSet)
+          assertEquals(
+            baseDirs(fixture.refsById("relocated")).getCanonicalFile,
+            new File(fixture.dir, "live").getCanonicalFile
+          )
+          assertNotEquals(
+            baseDirs(fixture.refsById("relocated")).getCanonicalFile,
+            new File(fixture.dir, "declared").getCanonicalFile
+          )
+        }
+      }
+  }
+
   test(
     "default - ThisBuild releaseIOMonorepoSelectionProjects override wins over the plugin's project default"
   ) {

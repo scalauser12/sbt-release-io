@@ -1,0 +1,8 @@
+target/
+project/target/
+project/project/
+global/
+*.log
+core/published
+skip-evaluated
+before-publish-hook-ran

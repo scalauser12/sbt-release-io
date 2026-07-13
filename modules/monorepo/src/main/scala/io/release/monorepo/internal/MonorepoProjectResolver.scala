@@ -8,6 +8,18 @@ import sbt.{internal as _, *}
 /** Resolves monorepo project metadata from the current sbt state. */
 private[monorepo] object MonorepoProjectResolver {
 
+  /** Resolve base directories for every project loaded into the current sbt structure.
+    * Change detection uses these directories to keep nested, nonparticipating projects out
+    * of their parent project's diff scope.
+    */
+  def resolveLoadedBaseDirs(state: State): IO[Map[ProjectRef, File]] =
+    IO.blocking {
+      val structure = Project.extract(state).structure
+      structure.allProjectRefs.flatMap { ref =>
+        (ref / baseDirectory).get(structure.data).map(ref -> _)
+      }.toMap
+    }
+
   def resolveAll(state: State): IO[Seq[ProjectReleaseInfo]] =
     IO.blocking {
       val extracted   = Project.extract(state)

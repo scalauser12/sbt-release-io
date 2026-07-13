@@ -2,16 +2,23 @@ package io.release.monorepo
 
 import cats.effect.IO
 import cats.effect.Ref
+import io.release.ReleaseManifestMetadata
+import io.release.ReleaseSharedKeys
 import io.release.TestSupport
 import io.release.monorepo.internal.*
 import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
 import io.release.monorepo.internal.MonorepoStepAliases.ProjectStep
 import io.release.monorepo.internal.steps.MonorepoPublishSteps
 import io.release.monorepo.internal.steps.MonorepoReleaseSteps
+import io.release.monorepo.internal.steps.MonorepoStepTestCompat
 import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.engine.ProcessStep
+import io.release.runtime.sbt.SbtRuntime
+import io.release.runtime.workflow.PublishValidation
+import io.release.vcs.Vcs
 import munit.CatsEffectSuite
 import sbt.Keys.*
+import sbt.Resolver
 import sbt.Setting
 
 import java.io.File
@@ -162,6 +169,7 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
             "set-release-version",
             "commit-release-versions",
             "before-tag:before-tag",
+            "plan-tag-names",
             "tag-releases",
             "after-tag:after-tag",
             "set-next-version",
@@ -445,9 +453,1297 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
     }
   }
 
+  test("compile - freeze publish hook gates under the overlay-effective Scala version") {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val rootSettings = publishHookSettings(observed) ++ Seq(
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks := true
+      )
+      val coreSettings = Seq(
+        version                                  := "0.1.0-SNAPSHOT",
+        scalaVersion                             := {
+          if (version.value == "1.0.0") TestSupport.alternateScalaVersion
+          else TestSupport.CurrentScalaVersion
+        },
+        publishTo                                := Some(Resolver.file("local", new File("."))),
+        ReleaseSharedKeys.releaseIOPublishAction := { /* no-op publish */ }
+      )
+
+      hookFixtureResource(
+        "monorepo-hook-compiler-overlay-scala-key",
+        rootSettings,
+        coreSettings
+      ).use { fixture =>
+        val ctx     = fixture.context(
+          selectedProjectIds = Seq("core"),
+          versionsById = Map("core" -> ("1.0.0" -> "1.1.0-SNAPSHOT"))
+        )
+        val project = ctx.currentProjects.head
+
+        compileLifecycle(fixture.state).flatMap { steps =>
+          val publishHooks = publishProjectHooksOnly(steps)
+          val before       = publishHooks
+            .find(_.name.startsWith("before-publish:"))
+            .getOrElse(fail("Expected before-publish hook"))
+          val after        = publishHooks
+            .find(_.name.startsWith("after-publish:"))
+            .getOrElse(fail("Expected after-publish hook"))
+
+          for {
+            beforeValidated  <- before.validate(ctx, project)
+            publishValidated <- MonorepoPublishSteps.publishArtifacts.validate(
+                                  beforeValidated,
+                                  project
+                                )
+            afterValidated   <- after.validate(publishValidated, project)
+            executeState      = TestSupport.appendSessionSettings(
+                                  afterValidated.state,
+                                  Seq(project.ref / version := "1.0.0")
+                                )
+            executeCtx        = afterValidated.withState(executeState)
+            afterBefore      <- before.execute(executeCtx, project)
+            afterPublish     <- MonorepoPublishSteps.publishArtifacts.execute(
+                                  afterBefore,
+                                  project
+                                )
+            _                <- after.execute(afterPublish, project)
+            events           <- observed.get
+          } yield assertEquals(
+            events,
+            List("validate-before", "validate-after", "execute-before", "execute-after")
+          )
+        }
+      }
+    }
+  }
+
+  test("compile - run after-publish under the source iteration when publish changes Scala") {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val rootSettings = publishHookSettings(observed) ++ Seq(
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks := true
+      )
+      val coreSettings = Seq(
+        scalaVersion   := TestSupport.CurrentScalaVersion,
+        publish / skip := false,
+        publishTo      := Some(Resolver.file("local", new File(".")))
+      )
+
+      hookFixtureResource(
+        "monorepo-hook-compiler-publish-action-scala-drift",
+        rootSettings,
+        coreSettings
+      ).use { fixture =>
+        val baseCtx = fixture.context(selectedProjectIds = Seq("core"))
+        val project = baseCtx.currentProjects.head
+        val marker  = new File(fixture.dir, "published.txt")
+        val ctx     = baseCtx.withState(
+          TestSupport.appendSessionSettings(
+            baseCtx.state,
+            Seq(
+              MonorepoStepTestCompat.publishActionWithScalaStateMutation(
+                project.ref,
+                TestSupport.alternateScalaVersion,
+                marker
+              )
+            )
+          )
+        )
+
+        compileLifecycle(fixture.state).flatMap { steps =>
+          val publishHooks = publishProjectHooksOnly(steps)
+          val before       = publishHooks
+            .find(_.name.startsWith("before-publish:"))
+            .getOrElse(fail("Expected before-publish hook"))
+          val after        = publishHooks
+            .find(_.name.startsWith("after-publish:"))
+            .getOrElse(fail("Expected after-publish hook"))
+
+          for {
+            beforeValidated  <- before.validate(ctx, project)
+            publishValidated <- MonorepoPublishSteps.publishArtifacts.validate(
+                                  beforeValidated,
+                                  project
+                                )
+            afterValidated   <- after.validate(publishValidated, project)
+            afterBefore      <- before.execute(afterValidated, project)
+            afterPublish     <- MonorepoPublishSteps.publishArtifacts.execute(
+                                  afterBefore,
+                                  project
+                                )
+            _                <- after.execute(afterPublish, project)
+            events           <- observed.get
+            published        <- IO.blocking(marker.exists())
+            liveScala         = SbtRuntime
+                                  .extracted(afterPublish.state)
+                                  .get(project.ref / scalaVersion)
+          } yield {
+            assert(published)
+            assertEquals(liveScala, TestSupport.alternateScalaVersion)
+            assertEquals(
+              events,
+              List("validate-before", "validate-after", "execute-before", "execute-after")
+            )
+          }
+        }
+      }
+    }
+  }
+
+  test("compile - share one authoritative skip probe across publish hooks and validation") {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val beforeHooks  = Seq(
+        MonorepoProjectHookIO(
+          name = "before-publish-one",
+          execute = (ctx, _) => observed.update(_ :+ "execute-before-one").as(ctx),
+          validate = (_, _) => observed.update(_ :+ "validate-before-one")
+        ),
+        MonorepoProjectHookIO(
+          name = "before-publish-two",
+          execute = (ctx, _) => observed.update(_ :+ "execute-before-two").as(ctx),
+          validate = (_, _) => observed.update(_ :+ "validate-before-two")
+        )
+      )
+      val afterHooks   = Seq(
+        MonorepoProjectHookIO(
+          name = "after-publish",
+          execute = (ctx, _) => observed.update(_ :+ "execute-after").as(ctx),
+          validate = (_, _) => observed.update(_ :+ "validate-after")
+        )
+      )
+      val rootSettings = Seq(
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks      := true,
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforePublish := beforeHooks,
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterPublish  := afterHooks
+      )
+
+      dynamicHookFixtureResource(
+        "monorepo-hook-compiler-shared-publish-probe",
+        rootSettings
+      ) { dir =>
+        Seq(
+          scalaVersion                             := TestSupport.CurrentScalaVersion,
+          MonorepoStepTestCompat.firstPublishSkipEvaluationReturnsTrue(
+            new File(dir, "publish-skip-evaluations.txt")
+          ),
+          publishTo                                := None,
+          ReleaseSharedKeys.releaseIOPublishAction :=
+            sbt.IO.touch(new File(dir, "published.txt"))
+        )
+      }.use { fixture =>
+        val ctx       = fixture.context(selectedProjectIds = Seq("core"))
+        val project   = ctx.currentProjects.head
+        val probe     = new File(fixture.dir, "publish-skip-evaluations.txt")
+        val published = new File(fixture.dir, "published.txt")
+
+        compileLifecycle(fixture.state).flatMap { steps =>
+          val flow = publishProjectFlowOnly(steps)
+
+          for {
+            validated   <- validatePublishHooks(flow, ctx, project)
+            result      <- executePublishHooks(flow, validated, project)
+            evaluations <- IO.blocking(sbt.IO.read(probe))
+            didPublish  <- IO.blocking(published.exists())
+            events      <- observed.get
+          } yield {
+            assertEquals(evaluations, "1")
+            assert(!didPublish)
+            assertEquals(events, Nil)
+            assertEquals(
+              validated.validatedPublishEligibility(
+                project.ref,
+                TestSupport.CurrentScalaVersion
+              ),
+              Some(false)
+            )
+            assertEquals(result.publishExecutedKeys, Some(Set.empty[String]))
+          }
+        }
+      }
+    }
+  }
+
+  test(
+    "compose - sequential publish validation observes legacy hook-installed publishTo"
+  ) {
+    val hook         = legacyAppendWithSessionHook("install-publish-target") { (_, project) =>
+      Seq(
+        project.ref / publishTo := Some(
+          Resolver.file("legacy-hook-target", project.baseDir)
+        )
+      )
+    }
+    val rootSettings = Seq(
+      MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks      := true,
+      MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforePublish := Seq(hook)
+    )
+
+    dynamicHookFixtureResource("monorepo-sequential-publish-target-install", rootSettings) { dir =>
+      Seq(
+        scalaVersion                             := TestSupport.CurrentScalaVersion,
+        publish / skip                           := false,
+        publishTo                                := None,
+        ReleaseSharedKeys.releaseIOPublishAction :=
+          sbt.IO.touch(new File(dir, "published.txt"))
+      )
+    }.use { fixture =>
+      val ctx       = fixture.context(
+        selectedProjectIds = Seq("core"),
+        versionsById = Map("core" -> ("1.0.0" -> "1.1.0-SNAPSHOT"))
+      )
+      val published = new File(fixture.dir, "published.txt")
+
+      compileLifecycle(fixture.state).flatMap { steps =>
+        MonorepoComposer
+          .compose(publishProjectFlowOnly(steps), crossBuild = false)(ctx)
+          .flatMap { result =>
+            IO.blocking {
+              assert(!result.failed)
+              assert(published.exists())
+            }
+          }
+      }
+    }
+  }
+
+  test(
+    "compose - sequential publish validation observes legacy hook-removed publishTo"
+  ) {
+    val hook         = legacyAppendWithSessionHook("remove-publish-target") { (_, project) =>
+      Seq(project.ref / publishTo := None)
+    }
+    val rootSettings = Seq(
+      MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks      := true,
+      MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforePublish := Seq(hook)
+    )
+
+    dynamicHookFixtureResource("monorepo-sequential-publish-target-remove", rootSettings) { dir =>
+      Seq(
+        scalaVersion                             := TestSupport.CurrentScalaVersion,
+        publish / skip                           := false,
+        publishTo                                := Some(Resolver.file("initial", dir)),
+        ReleaseSharedKeys.releaseIOPublishAction :=
+          sbt.IO.touch(new File(dir, "published.txt"))
+      )
+    }.use { fixture =>
+      val ctx       = fixture.context(
+        selectedProjectIds = Seq("core"),
+        versionsById = Map("core" -> ("1.0.0" -> "1.1.0-SNAPSHOT"))
+      )
+      val published = new File(fixture.dir, "published.txt")
+
+      compileLifecycle(fixture.state).flatMap { steps =>
+        for {
+          result <- MonorepoComposer
+                      .compose(publishProjectFlowOnly(steps), crossBuild = false)(ctx)
+                      .attempt
+          exists <- IO.blocking(published.exists())
+        } yield {
+          assertEquals(result.left.map(_.getMessage), Left(PublishValidation.message("core")))
+          assert(!exists)
+        }
+      }
+    }
+  }
+
+  test("compose - sequential publish refresh can only narrow eligibility") {
+    val hook         = legacyAppendWithSessionHook("suppress-publish") { (_, project) =>
+      Seq(project.ref / publish / skip := true)
+    }
+    val rootSettings = Seq(
+      MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks      := true,
+      MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforePublish := Seq(hook)
+    )
+
+    dynamicHookFixtureResource("monorepo-sequential-publish-narrow", rootSettings) { dir =>
+      Seq(
+        scalaVersion                             := TestSupport.CurrentScalaVersion,
+        publish / skip                           := false,
+        publishTo                                := Some(Resolver.file("initial", dir)),
+        ReleaseSharedKeys.releaseIOPublishAction :=
+          sbt.IO.touch(new File(dir, "published.txt"))
+      )
+    }.use { fixture =>
+      val ctx       = fixture.context(
+        selectedProjectIds = Seq("core"),
+        versionsById = Map("core" -> ("1.0.0" -> "1.1.0-SNAPSHOT"))
+      )
+      val project   = ctx.currentProjects.head
+      val published = new File(fixture.dir, "published.txt")
+
+      compileLifecycle(fixture.state).flatMap { steps =>
+        MonorepoComposer
+          .compose(publishProjectFlowOnly(steps), crossBuild = false)(ctx)
+          .flatMap { result =>
+            IO.blocking {
+              assert(!published.exists())
+              assertEquals(
+                result.validatedPublishEligibility(
+                  project.ref,
+                  TestSupport.CurrentScalaVersion
+                ),
+                Some(false)
+              )
+            }
+          }
+      }
+    }
+  }
+
+  test("compose - sequential refresh retains publish / skip state mutations for publishTo") {
+    val enableTarget = sbt.AttributeKey[Boolean]("sequentialPublishTargetEnabled")
+    val hook         = MonorepoProjectHookIO(
+      name = "enable-skip-target-mutation",
+      execute = (ctx, _) => IO.pure(ctx.withState(ctx.state.put(enableTarget, true))),
+      validate = (_, _) => IO.unit
+    )
+    val rootSettings = Seq(
+      MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks      := true,
+      MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforePublish := Seq(hook)
+    )
+
+    dynamicHookFixtureResource("monorepo-sequential-publish-skip-state", rootSettings) { dir =>
+      Seq(
+        scalaVersion                             := TestSupport.CurrentScalaVersion,
+        publish / skip                           := false,
+        publishTo                                := None,
+        ReleaseSharedKeys.releaseIOPublishAction :=
+          sbt.IO.touch(new File(dir, "published.txt"))
+      )
+    }.use { fixture =>
+      val baseCtx   = fixture.context(
+        selectedProjectIds = Seq("core"),
+        versionsById = Map("core" -> ("1.0.0" -> "1.1.0-SNAPSHOT"))
+      )
+      val project   = baseCtx.currentProjects.head
+      val target    = Resolver.file("skip-state-target", fixture.dir)
+      val ctx       = baseCtx.withState(
+        TestSupport.appendSessionSettings(
+          baseCtx.state,
+          Seq(
+            MonorepoStepTestCompat.publishSkipWithConditionalTargetStateMutation(
+              project.ref,
+              enableTarget,
+              target
+            )
+          )
+        )
+      )
+      val published = new File(fixture.dir, "published.txt")
+
+      compileLifecycle(fixture.state).flatMap { steps =>
+        MonorepoComposer
+          .compose(publishProjectFlowOnly(steps), crossBuild = false)(ctx)
+          .flatMap(_ => IO.blocking(assert(published.exists())))
+      }
+    }
+  }
+
+  test("compose - sequential global skip refresh closes the stale publish probe") {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val skipProbeName = "global-skip-evaluations.txt"
+      val rootSettings  = sequentialPublishHookSettings(
+        observed,
+        checksEnabled = true
+      )((ctx, _) => IO.pure(ctx.copy(skipPublish = true)))
+
+      dynamicHookFixtureResource("monorepo-sequential-global-publish-skip", rootSettings) { dir =>
+        Seq(
+          scalaVersion                             := TestSupport.CurrentScalaVersion,
+          MonorepoStepTestCompat.countedPublishSkipSetting(
+            new File(dir, skipProbeName),
+            skipped = false
+          ),
+          publishTo                                := None,
+          ReleaseSharedKeys.releaseIOPublishAction :=
+            sbt.IO.touch(new File(dir, "published.txt"))
+        )
+      }.use { fixture =>
+        val ctx       = fixture.context(
+          selectedProjectIds = Seq("core"),
+          versionsById = Map("core" -> ("1.0.0" -> "1.1.0-SNAPSHOT"))
+        )
+        val project   = ctx.currentProjects.head
+        val input     = MonorepoContext.PublishIteration(
+          project.ref,
+          TestSupport.CurrentScalaVersion
+        )
+        val skipProbe = new File(fixture.dir, skipProbeName)
+        val published = new File(fixture.dir, "published.txt")
+
+        compileLifecycle(fixture.state).flatMap { steps =>
+          MonorepoComposer
+            .compose(publishProjectFlowOnly(steps), crossBuild = false)(ctx)
+            .flatMap { result =>
+              for {
+                events      <- observed.get
+                exists      <- IO.blocking(published.exists())
+                evaluations <- IO.blocking(sbt.IO.read(skipProbe).trim.toInt)
+              } yield {
+                val probe = result
+                  .publishValidationProbe(input)
+                  .getOrElse(fail("Expected refreshed publish validation probe"))
+
+                assert(!exists)
+                assertEquals(events, List("validate-before", "execute-before"))
+                assertEquals(evaluations, 2)
+                assert(probe.publishSkipped)
+                assert(probe.targetValidated)
+                assertEquals(probe.pendingTargetState, None)
+                assertEquals(result.validatedPublishEligibility(input), Some(false))
+                assertEquals(result.publishExecutedKeys, Some(Set.empty[String]))
+              }
+            }
+        }
+      }
+    }
+  }
+
+  test("compose - sequential checks-disabled refresh observes hook-installed publish skip") {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val skipProbeName = "installed-skip-evaluations.txt"
+      val installSkip   = legacyAppendWithSessionHook("install-publish-skip") { (_, project) =>
+        Seq(
+          MonorepoStepTestCompat.countedProjectPublishSkipSetting(
+            project.ref,
+            new File(project.baseDir, skipProbeName),
+            skipped = true
+          )
+        )
+      }
+      val rootSettings  = sequentialPublishHookSettings(
+        observed,
+        checksEnabled = false
+      )(installSkip.execute)
+
+      dynamicHookFixtureResource("monorepo-sequential-checks-disabled-skip", rootSettings) { dir =>
+        Seq(
+          scalaVersion                             := TestSupport.CurrentScalaVersion,
+          publish / skip                           := false,
+          publishTo                                := None,
+          ReleaseSharedKeys.releaseIOPublishAction :=
+            sbt.IO.touch(new File(dir, "published.txt"))
+        )
+      }.use { fixture =>
+        val ctx       = fixture.context(selectedProjectIds = Seq("core"))
+        val project   = ctx.currentProjects.head
+        val input     = MonorepoContext.PublishIteration(
+          project.ref,
+          TestSupport.CurrentScalaVersion
+        )
+        val skipProbe = new File(project.baseDir, skipProbeName)
+        val published = new File(fixture.dir, "published.txt")
+
+        compileLifecycle(fixture.state).flatMap { steps =>
+          MonorepoComposer
+            .compose(publishProjectFlowOnly(steps), crossBuild = false)(ctx)
+            .flatMap { result =>
+              for {
+                events      <- observed.get
+                exists      <- IO.blocking(published.exists())
+                evaluations <- IO.blocking(sbt.IO.read(skipProbe).trim.toInt)
+              } yield {
+                val probe = result
+                  .publishValidationProbe(input)
+                  .getOrElse(fail("Expected refreshed publish validation probe"))
+
+                assert(!exists)
+                assertEquals(events, List("validate-before", "execute-before"))
+                assertEquals(evaluations, 2)
+                assert(probe.publishSkipped)
+                assert(probe.targetValidated)
+                assertEquals(probe.pendingTargetState, None)
+                assert(!result.hasValidatedPublishEligibilitySnapshot)
+                assertEquals(result.publishExecutedKeys, Some(Set.empty[String]))
+              }
+            }
+        }
+      }
+    }
+  }
+
+  test("compose - sequential checks-disabled eligible refresh stays snapshotless") {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val skipProbeName     = "eligible-skip-evaluations.txt"
+      val retainEligibility = legacyAppendWithSessionHook("retain-publish-eligibility") {
+        (_, project) =>
+          Seq(
+            MonorepoStepTestCompat.countedProjectPublishSkipSetting(
+              project.ref,
+              new File(project.baseDir, skipProbeName),
+              skipped = false
+            )
+          )
+      }
+      val rootSettings      = sequentialPublishHookSettings(
+        observed,
+        checksEnabled = false
+      )(retainEligibility.execute)
+
+      dynamicHookFixtureResource("monorepo-sequential-checks-disabled-eligible", rootSettings) {
+        dir =>
+          Seq(
+            scalaVersion                             := TestSupport.CurrentScalaVersion,
+            publish / skip                           := false,
+            publishTo                                := None,
+            ReleaseSharedKeys.releaseIOPublishAction :=
+              sbt.IO.touch(new File(dir, "published.txt"))
+          )
+      }.use { fixture =>
+        val ctx       = fixture.context(selectedProjectIds = Seq("core"))
+        val project   = ctx.currentProjects.head
+        val input     = MonorepoContext.PublishIteration(
+          project.ref,
+          TestSupport.CurrentScalaVersion
+        )
+        val skipProbe = new File(project.baseDir, skipProbeName)
+        val published = new File(fixture.dir, "published.txt")
+
+        compileLifecycle(fixture.state).flatMap { steps =>
+          MonorepoComposer
+            .compose(publishProjectFlowOnly(steps), crossBuild = false)(ctx)
+            .flatMap { result =>
+              for {
+                events      <- observed.get
+                exists      <- IO.blocking(published.exists())
+                evaluations <- IO.blocking(sbt.IO.read(skipProbe).trim.toInt)
+              } yield {
+                val probe = result
+                  .publishValidationProbe(input)
+                  .getOrElse(fail("Expected refreshed publish validation probe"))
+
+                assert(exists)
+                assertEquals(
+                  events,
+                  List("validate-before", "execute-before", "validate-after", "execute-after")
+                )
+                assertEquals(evaluations, 2)
+                assert(!probe.publishSkipped)
+                assert(probe.targetValidated)
+                assertEquals(probe.pendingTargetState, None)
+                assert(!result.hasValidatedPublishEligibilitySnapshot)
+                assert(result.publishExecutedKeys.exists(_.nonEmpty))
+              }
+            }
+        }
+      }
+    }
+  }
+
+  test(
+    "compose - sequential checks-enabled publish keeps after-publish on a persistent source"
+  ) {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val rootSettings = Seq(
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks     := true,
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterPublish := Seq(
+          MonorepoProjectHookIO(
+            name = "after-publish",
+            execute = (ctx, _) => observed.update(_ :+ "execute-after").as(ctx),
+            validate = (_, _) => observed.update(_ :+ "validate-after")
+          )
+        )
+      )
+
+      dynamicHookFixtureResource(
+        "monorepo-sequential-persistent-publish-scala",
+        rootSettings
+      ) { dir =>
+        Seq(
+          scalaVersion   := TestSupport.CurrentScalaVersion,
+          publish / skip := false,
+          publishTo      := Some(Resolver.file("local", new File(dir, "repository")))
+        )
+      }.use { fixture =>
+        val baseCtx  = fixture.context(
+          selectedProjectIds = Seq("core"),
+          versionsById = Map("core" -> ("1.0.0" -> "1.1.0-SNAPSHOT"))
+        )
+        val project  = baseCtx.currentProjects.head
+        val marker   = new File(fixture.dir, "published.txt")
+        val ctx      = baseCtx.withState(
+          TestSupport.appendSessionSettings(
+            baseCtx.state,
+            Seq(
+              MonorepoStepTestCompat.publishActionWithPersistentScalaStateMutation(
+                project.ref,
+                TestSupport.alternateScalaVersion,
+                marker
+              )
+            )
+          )
+        )
+        val attempt  = MonorepoContext.PublishIteration(
+          project.ref,
+          TestSupport.CurrentScalaVersion
+        )
+        val returned = MonorepoContext.PublishIteration(
+          project.ref,
+          TestSupport.alternateScalaVersion
+        )
+
+        compileLifecycle(fixture.state).flatMap { steps =>
+          MonorepoComposer
+            .compose(publishProjectFlowOnly(steps), crossBuild = false)(ctx)
+            .flatMap { result =>
+              for {
+                events    <- observed.get
+                published <- IO.blocking(marker.exists())
+                liveScala  = SbtRuntime.extracted(result.state).get(project.ref / scalaVersion)
+              } yield {
+                val probe = result
+                  .publishValidationProbe(attempt)
+                  .getOrElse(fail("Expected checks-enabled publish validation probe"))
+
+                assert(published)
+                assertEquals(liveScala, TestSupport.alternateScalaVersion)
+                assertEquals(probe.input, attempt)
+                assertEquals(probe.entry, attempt)
+                assertEquals(probe.postSkip, attempt)
+                assert(probe.targetValidated)
+                assertEquals(probe.pendingTargetState, None)
+                assertEquals(result.validatedPublishEligibility(attempt), Some(true))
+                assertEquals(result.publishExecutedKeys, Some(Set(attempt.gateKey)))
+                assertEquals(
+                  result.afterPublishOutcome(returned),
+                  MonorepoContext.AfterPublishOutcome(attempt, succeeded = true)
+                )
+                assertEquals(
+                  MonorepoPublishSteps.afterPublishGateKey(result, project),
+                  attempt.gateKey
+                )
+                assert(MonorepoPublishSteps.didPublishForAfterHook(result, project))
+                assertEquals(events, List("validate-after", "execute-after"))
+                assertEquals(events.count(_ == "validate-after"), 1)
+                assertEquals(events.count(_ == "execute-after"), 1)
+              }
+            }
+        }
+      }
+    }
+  }
+
+  test("compose - cross publish retains persistent cross versions without expanding hooks") {
+    Ref.of[IO, List[String]](Nil).flatMap { afterPublishScalaVersions =>
+      val scalaA       = TestSupport.CurrentScalaVersion
+      val scalaB       = TestSupport.alternateScalaVersion
+      val scalaC       = "2.13.16"
+      val crossAB      = Seq(scalaA, scalaB)
+      val crossABC     = Seq(scalaA, scalaB, scalaC)
+      val rootSettings = Seq(
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks     := true,
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterPublish := Seq(
+          MonorepoProjectHookIO(
+            name = "after-publish",
+            execute = (ctx, project) =>
+              IO.blocking(
+                SbtRuntime.extracted(ctx.state).get(project.ref / scalaVersion)
+              ).flatMap(version => afterPublishScalaVersions.update(_ :+ version))
+                .as(ctx),
+            validate = (_, _) => IO.unit
+          )
+        )
+      )
+
+      dynamicHookFixtureResource(
+        "monorepo-cross-publish-persistent-cross-versions",
+        rootSettings
+      ) { dir =>
+        Seq(
+          scalaVersion       := scalaA,
+          crossScalaVersions := crossAB,
+          publish / skip     := false,
+          publishTo          := Some(Resolver.file("local", new File(dir, "repository")))
+        )
+      }.use { fixture =>
+        val baseCtx           = fixture.context(selectedProjectIds = Seq("core"))
+        val project           = baseCtx.currentProjects.head
+        val published         = new File(fixture.dir, "published-scala-versions.txt")
+        val ctx               = baseCtx.withState(
+          TestSupport.appendSessionSettings(
+            baseCtx.state,
+            Seq(
+              MonorepoStepTestCompat.publishActionWithPersistentCrossScalaVersionsMutation(
+                project.ref,
+                crossABC,
+                published
+              )
+            )
+          )
+        )
+        val boundary: AnyStep = ProcessStep.Single(
+          name = MonorepoComposer.SelectionBoundary,
+          execute = (current: MonorepoContext) => IO.pure(current),
+          roles = Set(BuiltInStepRole.SelectionBoundary)
+        )
+
+        compileLifecycle(fixture.state).flatMap { steps =>
+          val flow: Seq[AnyStep] = boundary +: publishProjectFlowOnly(steps)
+
+          MonorepoComposer.compose(flow, crossBuild = true)(ctx).flatMap { result =>
+            for {
+              publishedVersions <- IO.blocking(sbt.IO.readLines(published))
+              afterVersions     <- afterPublishScalaVersions.get
+              finalScala         = SbtRuntime
+                                     .extracted(result.state)
+                                     .get(project.ref / scalaVersion)
+              finalCrossVersions = SbtRuntime
+                                     .extracted(result.state)
+                                     .get(project.ref / crossScalaVersions)
+            } yield {
+              assert(!result.failed)
+              assertEquals(publishedVersions, crossAB)
+              assertEquals(afterVersions, crossAB.toList)
+              assertEquals(finalScala, scalaA)
+              assertEquals(finalCrossVersions, crossABC)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("compose - sequential checks-disabled probe-less success runs after-publish") {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val rootSettings = Seq(
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks     := false,
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterPublish := Seq(
+          MonorepoProjectHookIO(
+            name = "after-publish",
+            execute = (ctx, _) => observed.update(_ :+ "execute-after").as(ctx),
+            validate = (_, _) => observed.update(_ :+ "validate-after")
+          )
+        )
+      )
+
+      dynamicHookFixtureResource(
+        "monorepo-sequential-probe-less-publish",
+        rootSettings
+      ) { dir =>
+        Seq(
+          scalaVersion                             := TestSupport.CurrentScalaVersion,
+          publish / skip                           := false,
+          publishTo                                := None,
+          ReleaseSharedKeys.releaseIOPublishAction :=
+            sbt.IO.touch(new File(dir, "published.txt"))
+        )
+      }.use { fixture =>
+        val ctx       = fixture.context(selectedProjectIds = Seq("core"))
+        val project   = ctx.currentProjects.head
+        val input     = MonorepoContext.PublishIteration(
+          project.ref,
+          TestSupport.CurrentScalaVersion
+        )
+        val published = new File(fixture.dir, "published.txt")
+
+        compileLifecycle(fixture.state).flatMap { steps =>
+          MonorepoComposer
+            .compose(publishProjectFlowOnly(steps), crossBuild = false)(ctx)
+            .flatMap { result =>
+              for {
+                events <- observed.get
+                exists <- IO.blocking(published.exists())
+              } yield {
+                assert(exists)
+                assertEquals(result.publishValidationProbe(input), None)
+                assertEquals(result.validatedPublishGateDecision(input), None)
+                assert(!result.hasValidatedPublishEligibilitySnapshot)
+                assertEquals(result.publishExecutedKeys, Some(Set(input.gateKey)))
+                assertEquals(
+                  result.afterPublishOutcome(input),
+                  MonorepoContext.AfterPublishOutcome(input, succeeded = true)
+                )
+                assertEquals(events, List("validate-after", "execute-after"))
+                assertEquals(events.count(_ == "validate-after"), 1)
+                assertEquals(events.count(_ == "execute-after"), 1)
+              }
+            }
+        }
+      }
+    }
+  }
+
+  test("compose - upfront after-publish maps a pre-overlay attempt to its entry") {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val rootSettings = Seq(
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks     := false,
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterPublish := Seq(
+          MonorepoProjectHookIO(
+            name = "after-publish",
+            execute = (ctx, _) => observed.update(_ :+ "execute-after").as(ctx),
+            validate = (_, _) => observed.update(_ :+ "validate-after")
+          )
+        )
+      )
+
+      dynamicHookFixtureResource(
+        "monorepo-upfront-publish-overlay-entry-gate",
+        rootSettings
+      ) { dir =>
+        Seq(
+          version                                  := "0.1.0-SNAPSHOT",
+          scalaVersion                             := {
+            if (version.value == "1.0.0") TestSupport.alternateScalaVersion
+            else TestSupport.CurrentScalaVersion
+          },
+          publish / skip                           := false,
+          ReleaseSharedKeys.releaseIOPublishAction :=
+            sbt.IO.touch(new File(dir, "published.txt"))
+        )
+      }.use { fixture =>
+        val ctx               = fixture.context(
+          selectedProjectIds = Seq("core"),
+          versionsById = Map("core" -> ("1.0.0" -> "1.1.0-SNAPSHOT"))
+        )
+        val project           = ctx.currentProjects.head
+        val input             = MonorepoContext.PublishIteration(
+          project.ref,
+          TestSupport.CurrentScalaVersion
+        )
+        val entry             = MonorepoContext.PublishIteration(
+          project.ref,
+          TestSupport.alternateScalaVersion
+        )
+        val published         = new File(fixture.dir, "published.txt")
+        val boundary: AnyStep = ProcessStep.Single(
+          name = MonorepoComposer.SelectionBoundary,
+          execute = (current: MonorepoContext) => IO.pure(current),
+          roles = Set(BuiltInStepRole.SelectionBoundary)
+        )
+
+        compileLifecycle(fixture.state).flatMap { steps =>
+          val flow: Seq[AnyStep] = boundary +: publishProjectFlowOnly(steps)
+
+          MonorepoComposer.compose(flow, crossBuild = false)(ctx).flatMap { result =>
+            for {
+              events     <- observed.get
+              didPublish <- IO.blocking(published.exists())
+              liveScala   = SbtRuntime.extracted(result.state).get(project.ref / scalaVersion)
+            } yield {
+              val probe = result
+                .publishValidationProbe(input)
+                .getOrElse(fail("Expected publish validation probe"))
+
+              assert(!result.failed)
+              assert(didPublish)
+              assertEquals(liveScala, TestSupport.CurrentScalaVersion)
+              assertEquals(probe.entry, entry)
+              assertEquals(MonorepoPublishSteps.afterPublishGateKey(result, project), entry.gateKey)
+              assertEquals(events, List("validate-after", "execute-after"))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("compose - sequential publish hooks map a pre-overlay attempt to its entry") {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val rootSettings = publishHookSettings(observed) ++ Seq(
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks := false
+      )
+
+      dynamicHookFixtureResource(
+        "monorepo-sequential-publish-overlay-entry-gate",
+        rootSettings
+      ) { dir =>
+        Seq(
+          version                                  := "0.1.0-SNAPSHOT",
+          scalaVersion                             := {
+            if (version.value == "1.0.0") TestSupport.alternateScalaVersion
+            else TestSupport.CurrentScalaVersion
+          },
+          publish / skip                           := false,
+          ReleaseSharedKeys.releaseIOPublishAction :=
+            sbt.IO.touch(new File(dir, "published.txt"))
+        )
+      }.use { fixture =>
+        val ctx       = fixture.context(
+          selectedProjectIds = Seq("core"),
+          versionsById = Map("core" -> ("1.0.0" -> "1.1.0-SNAPSHOT"))
+        )
+        val project   = ctx.currentProjects.head
+        val input     = MonorepoContext.PublishIteration(
+          project.ref,
+          TestSupport.CurrentScalaVersion
+        )
+        val entry     = MonorepoContext.PublishIteration(
+          project.ref,
+          TestSupport.alternateScalaVersion
+        )
+        val published = new File(fixture.dir, "published.txt")
+
+        compileLifecycle(fixture.state).flatMap { steps =>
+          MonorepoComposer
+            .compose(publishProjectFlowOnly(steps), crossBuild = false)(ctx)
+            .flatMap { result =>
+              for {
+                events     <- observed.get
+                didPublish <- IO.blocking(published.exists())
+                liveScala   = SbtRuntime.extracted(result.state).get(project.ref / scalaVersion)
+              } yield {
+                val probe = result
+                  .publishValidationProbe(input)
+                  .getOrElse(fail("Expected publish validation probe"))
+
+                assert(!result.failed)
+                assert(didPublish)
+                assertEquals(liveScala, TestSupport.CurrentScalaVersion)
+                assertEquals(probe.entry, entry)
+                assertEquals(
+                  MonorepoPublishSteps.afterPublishGateKey(result, project),
+                  entry.gateKey
+                )
+                assertEquals(
+                  events,
+                  List("validate-before", "execute-before", "validate-after", "execute-after")
+                )
+              }
+            }
+        }
+      }
+    }
+  }
+
+  test("compose - sequential checks-disabled prelude can enable checked publish") {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val skipProbeName = "enabled-checks-skip-evaluations.txt"
+      val enableChecks  = legacyAppendWithSessionHook("enable-publish-checks") { (_, project) =>
+        Seq(
+          MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks := true,
+          MonorepoStepTestCompat.countedProjectPublishSkipSetting(
+            project.ref,
+            new File(project.baseDir, skipProbeName),
+            skipped = false
+          ),
+          project.ref / publishTo                                         := Some(
+            Resolver.file("hook-installed", new File(project.baseDir, "repository"))
+          )
+        )
+      }
+      val rootSettings  = sequentialPublishHookSettings(
+        observed,
+        checksEnabled = false
+      )(enableChecks.execute)
+
+      dynamicHookFixtureResource(
+        "monorepo-sequential-enable-publish-checks",
+        rootSettings
+      ) { dir =>
+        Seq(
+          scalaVersion                             := TestSupport.CurrentScalaVersion,
+          publish / skip                           := false,
+          publishTo                                := None,
+          ReleaseSharedKeys.releaseIOPublishAction :=
+            sbt.IO.touch(new File(dir, "published.txt"))
+        )
+      }.use { fixture =>
+        val ctx       = fixture.context(selectedProjectIds = Seq("core"))
+        val project   = ctx.currentProjects.head
+        val input     = MonorepoContext.PublishIteration(
+          project.ref,
+          TestSupport.CurrentScalaVersion
+        )
+        val skipProbe = new File(project.baseDir, skipProbeName)
+        val published = new File(fixture.dir, "published.txt")
+
+        compileLifecycle(fixture.state).flatMap { steps =>
+          MonorepoComposer
+            .compose(publishProjectFlowOnly(steps), crossBuild = false)(ctx)
+            .flatMap { result =>
+              for {
+                events      <- observed.get
+                exists      <- IO.blocking(published.exists())
+                evaluations <- IO.blocking(sbt.IO.read(skipProbe).trim.toInt)
+              } yield {
+                val probe = result
+                  .publishValidationProbe(input)
+                  .getOrElse(fail("Expected refreshed checks-enabled publish probe"))
+
+                assert(exists)
+                assertEquals(evaluations, 2)
+                assert(!probe.publishSkipped)
+                assert(probe.targetValidated)
+                assertEquals(probe.pendingTargetState, None)
+                assert(result.hasValidatedPublishEligibilitySnapshot)
+                assertEquals(result.validatedPublishEligibility(input), Some(true))
+                assertEquals(result.publishExecutedKeys, Some(Set(input.gateKey)))
+                assertEquals(
+                  events,
+                  List("validate-before", "execute-before", "validate-after", "execute-after")
+                )
+                assertEquals(events.count(_ == "validate-after"), 1)
+                assertEquals(events.count(_ == "execute-after"), 1)
+              }
+            }
+        }
+      }
+    }
+  }
+
+  test("compile - key checks-disabled after-publish under the attempt-scoped iteration") {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val settings = publishHookSettings(observed) ++ Seq(
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks := false
+      )
+
+      dynamicHookFixtureResource(
+        "monorepo-hook-compiler-post-skip-after-publish-key",
+        settings
+      ) { dir =>
+        Seq(
+          scalaVersion                             := TestSupport.CurrentScalaVersion,
+          publish / skip                           := false,
+          ReleaseSharedKeys.releaseIOPublishAction :=
+            sbt.IO.touch(new File(dir, "published.txt"))
+        )
+      }.use { fixture =>
+        val baseCtx = fixture.context(selectedProjectIds = Seq("core"))
+        val project = baseCtx.currentProjects.head
+        val marker  = new File(fixture.dir, "published.txt")
+        val ctx     = baseCtx.withState(
+          TestSupport.appendSessionSettings(
+            baseCtx.state,
+            Seq(
+              MonorepoStepTestCompat.publishSkipWithScalaStateMutation(
+                project.ref,
+                TestSupport.alternateScalaVersion,
+                skipped = false
+              )
+            )
+          )
+        )
+
+        compileLifecycle(fixture.state).flatMap { steps =>
+          val flow = publishProjectFlowOnly(steps)
+
+          for {
+            validated  <- validatePublishHooks(flow, ctx, project)
+            result     <- executePublishHooks(flow, validated, project)
+            didPublish <- IO.blocking(marker.exists())
+            events     <- observed.get
+            liveScala   = SbtRuntime.extracted(result.state).get(project.ref / scalaVersion)
+          } yield {
+            assert(didPublish)
+            assertEquals(liveScala, TestSupport.alternateScalaVersion)
+            assertEquals(
+              events,
+              List("validate-before", "validate-after", "execute-before", "execute-after")
+            )
+          }
+        }
+      }
+    }
+  }
+
+  test("compile - retain successful post-skip source when publish restores entry Scala") {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val settings = publishHookSettings(observed) ++ Seq(
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks := false
+      )
+
+      dynamicHookFixtureResource(
+        "monorepo-hook-compiler-restored-publish-source",
+        settings
+      ) { dir =>
+        Seq(
+          scalaVersion   := TestSupport.CurrentScalaVersion,
+          publish / skip := false
+        )
+      }.use { fixture =>
+        val baseCtx = fixture.context(selectedProjectIds = Seq("core"))
+        val project = baseCtx.currentProjects.head
+        val marker  = new File(fixture.dir, "published.txt")
+        val ctx     = baseCtx.withState(
+          TestSupport.appendSessionSettings(
+            baseCtx.state,
+            Seq(
+              MonorepoStepTestCompat.publishSkipWithScalaStateMutation(
+                project.ref,
+                TestSupport.alternateScalaVersion,
+                skipped = false
+              ),
+              MonorepoStepTestCompat.publishActionWithScalaStateMutation(
+                project.ref,
+                TestSupport.CurrentScalaVersion,
+                marker
+              )
+            )
+          )
+        )
+
+        compileLifecycle(fixture.state).flatMap { steps =>
+          val flow = publishProjectFlowOnly(steps)
+
+          for {
+            validated  <- validatePublishHooks(flow, ctx, project)
+            result     <- executePublishHooks(flow, validated, project)
+            didPublish <- IO.blocking(marker.exists())
+            events     <- observed.get
+            liveScala   = SbtRuntime.extracted(result.state).get(project.ref / scalaVersion)
+          } yield {
+            assert(didPublish)
+            assertEquals(liveScala, TestSupport.CurrentScalaVersion)
+            assertEquals(
+              events,
+              List("validate-before", "validate-after", "execute-before", "execute-after")
+            )
+            assertEquals(events.count(_ == "execute-after"), 1)
+          }
+        }
+      }
+    }
+  }
+
+  test("compile - keep converged post-skip after-publish gates attempt scoped") {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val settings = publishHookSettings(observed) ++ Seq(
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks := false
+      )
+
+      hookFixtureResource(
+        "monorepo-hook-compiler-converged-after-publish-gates",
+        settings,
+        Seq(scalaVersion := TestSupport.CurrentScalaVersion)
+      ).use { fixture =>
+        val baseCtx = fixture.context(selectedProjectIds = Seq("core"))
+        val project = baseCtx.currentProjects.head
+
+        for {
+          stateA       <- stateWithProjectScalaVersion(
+                            baseCtx.state,
+                            project.ref,
+                            TestSupport.CurrentScalaVersion
+                          )
+          stateB       <- stateWithProjectScalaVersion(
+                            baseCtx.state,
+                            project.ref,
+                            TestSupport.alternateScalaVersion
+                          )
+          steps        <- compileLifecycle(fixture.state)
+          after         = publishProjectHooksOnly(steps)
+                            .find(_.name.startsWith("after-publish:"))
+                            .getOrElse(fail("Expected after-publish hook"))
+          attemptA      = MonorepoContext.PublishIteration(
+                            project.ref,
+                            TestSupport.CurrentScalaVersion
+                          )
+          attemptB      = MonorepoContext.PublishIteration(
+                            project.ref,
+                            TestSupport.alternateScalaVersion
+                          )
+          probeA        = MonorepoContext.PublishValidationProbe(
+                            input = attemptA,
+                            entry = attemptA,
+                            postSkip = attemptB,
+                            publishSkipped = false,
+                            pendingTargetState = None,
+                            targetValidated = true
+                          )
+          probeB        = MonorepoContext.PublishValidationProbe(
+                            input = attemptB,
+                            entry = attemptB,
+                            postSkip = attemptB,
+                            publishSkipped = true,
+                            pendingTargetState = None,
+                            targetValidated = true
+                          )
+          validationCtx = baseCtx
+                            .withState(stateA)
+                            .recordPublishValidationProbe(probeA)
+                            .recordPublishValidationProbe(probeB)
+          validatedA   <- after.validate(validationCtx, project)
+          validatedB   <- after.validate(validatedA.withState(stateB), project)
+          executionCtx  = validatedB.beginPublishExecutionBatch
+                            .recordPublishAttempt(attemptA)
+                            .recordPublishSucceeded(
+                              attemptIteration = attemptA,
+                              actionIteration = attemptB,
+                              hookSource = attemptB,
+                              taskReturnedIteration = attemptB
+                            )
+                            .recordPublishAttempt(attemptB)
+          executedA    <- after.execute(executionCtx.withState(stateA), project)
+          _            <- after.execute(executedA.withState(stateB), project)
+          events       <- observed.get
+        } yield {
+          assertEquals(
+            executionCtx.afterPublishOutcome(attemptA),
+            MonorepoContext.AfterPublishOutcome(attemptA, succeeded = true)
+          )
+          assertEquals(
+            executionCtx.afterPublishOutcome(attemptB),
+            MonorepoContext.AfterPublishOutcome(attemptB, succeeded = false)
+          )
+          assertEquals(events, List("validate-after", "execute-after"))
+        }
+      }
+    }
+  }
+
+  test("compile - attribute metadata-shifted publish success to the validated hook source") {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val settings = publishHookSettings(observed) ++ Seq(
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks := false
+      )
+
+      dynamicHookFixtureResource(
+        "monorepo-hook-compiler-metadata-shifted-publish-source",
+        settings
+      ) { dir =>
+        Seq(
+          ReleaseManifestMetadata.releaseIOInternalReleaseHash := None,
+          scalaVersion                                         :=
+            ReleaseManifestMetadata.releaseIOInternalReleaseHash.value.fold(
+              TestSupport.CurrentScalaVersion
+            )(_ => TestSupport.alternateScalaVersion),
+          publish / skip                                       := false,
+          ReleaseSharedKeys.releaseIOPublishAction             :=
+            sbt.IO.touch(new File(dir, "published.txt"))
+        )
+      }.use { fixture =>
+        val baseCtx   = fixture.context(
+          selectedProjectIds = Seq("core"),
+          versionsById = Map("core" -> ("1.0.0" -> "1.1.0-SNAPSHOT")),
+          vcs = Some(new PublishPreparationTestVcs(fixture.dir))
+        )
+        val project   = baseCtx.currentProjects.head
+        val marker    = new File(fixture.dir, "published.txt")
+        val hookKey   = MonorepoContext
+          .PublishIteration(project.ref, TestSupport.CurrentScalaVersion)
+          .gateKey
+        val actionKey = MonorepoContext
+          .PublishIteration(project.ref, TestSupport.alternateScalaVersion)
+          .gateKey
+
+        compileLifecycle(fixture.state).flatMap { steps =>
+          val flow = publishProjectFlowOnly(steps)
+
+          for {
+            validated  <- validatePublishHooks(flow, baseCtx, project)
+            result     <- executePublishHooks(flow, validated, project)
+            didPublish <- IO.blocking(marker.exists())
+            events     <- observed.get
+            liveScala   = SbtRuntime.extracted(result.state).get(project.ref / scalaVersion)
+          } yield {
+            assert(didPublish)
+            assertEquals(liveScala, TestSupport.alternateScalaVersion)
+            assertEquals(MonorepoPublishSteps.afterPublishGateKey(result, project), hookKey)
+            assert(MonorepoPublishSteps.didPublishForAfterHook(result, project))
+            assert(result.publishExecutedKeys.exists(_.contains(actionKey)))
+            assert(!result.publishExecutedKeys.exists(_.contains(hookKey)))
+            assertEquals(
+              events,
+              List("validate-before", "validate-after", "execute-before", "execute-after")
+            )
+          }
+        }
+      }
+    }
+  }
+
   private def hookFixtureResource(
       prefix: String,
-      rootSettings: Seq[Setting[?]] = Nil
+      rootSettings: Seq[Setting[?]] = Nil,
+      projectSettings: Seq[Setting[?]] = Nil
   ) =
     MonorepoSpecSupport.loadedFixtureResource(prefix) { dir =>
       val coreBase = new File(dir, "core")
@@ -468,7 +1764,37 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
         MonorepoSpecSupport.versionedProject(
           "core",
           coreBase,
-          settings = Seq(publish / skip := false)
+          settings = Seq(publish / skip := false) ++ projectSettings
+        )
+      )
+    }
+
+  private def dynamicHookFixtureResource(
+      prefix: String,
+      rootSettings: Seq[Setting[?]]
+  )(
+      projectSettings: File => Seq[Setting[?]]
+  ) =
+    MonorepoSpecSupport.loadedFixtureResource(prefix) { dir =>
+      val coreBase = new File(dir, "core")
+      coreBase.mkdirs()
+
+      sbt.IO.write(new File(dir, "version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
+      sbt.IO.write(new File(coreBase, "version.sbt"), """version := "0.1.0-SNAPSHOT"""" + "\n")
+
+      TestSupport.initGitRepo(dir)
+      TestSupport.commitAll(dir, "Initial commit")
+
+      Seq(
+        MonorepoSpecSupport.monorepoRootProject(
+          dir,
+          projectIds = Seq("core"),
+          settings = hookSettingsDefaults ++ rootSettings
+        ),
+        MonorepoSpecSupport.versionedProject(
+          "core",
+          coreBase,
+          settings = projectSettings(dir)
         )
       )
     }
@@ -485,6 +1811,15 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
     steps
       .flatMap(asProjectStep)
       .filter(p => p.name.startsWith("before-publish:") || p.name.startsWith("after-publish:"))
+
+  private def publishProjectFlowOnly(steps: Seq[AnyStep]): Seq[ProjectStep] =
+    steps
+      .flatMap(asProjectStep)
+      .filter(step =>
+        step.hasRole(BuiltInStepRole.PublishArtifacts) ||
+          step.name.startsWith("before-publish:") ||
+          step.name.startsWith("after-publish:")
+      )
 
   private def asProjectStep(step: AnyStep): Option[ProjectStep] =
     ProcessStep.fold[MonorepoContext, ProjectReleaseInfo, Option[ProjectStep]](step)(
@@ -523,6 +1858,48 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
       )
     )
 
+  private def sequentialPublishHookSettings(
+      observed: Ref[IO, List[String]],
+      checksEnabled: Boolean
+  )(
+      beforeExecute: (MonorepoContext, ProjectReleaseInfo) => IO[MonorepoContext]
+  ): Seq[Setting[?]] =
+    Seq(
+      MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks      := checksEnabled,
+      MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksBeforePublish := Seq(
+        MonorepoProjectHookIO(
+          name = "before-publish",
+          execute =
+            (ctx, project) => observed.update(_ :+ "execute-before") *> beforeExecute(ctx, project),
+          validate = (_, _) => observed.update(_ :+ "validate-before")
+        )
+      ),
+      MonorepoReleasePlugin.autoImport.releaseIOMonorepoHooksAfterPublish  := Seq(
+        MonorepoProjectHookIO(
+          name = "after-publish",
+          execute = (ctx, _) => observed.update(_ :+ "execute-after").as(ctx),
+          validate = (_, _) => observed.update(_ :+ "validate-after")
+        )
+      )
+    )
+
+  private def legacyAppendWithSessionHook(
+      name: String
+  )(
+      settings: (MonorepoContext, ProjectReleaseInfo) => Seq[Setting[?]]
+  ): MonorepoProjectHookIO =
+    MonorepoProjectHookIO(
+      name = name,
+      execute = (ctx, project) =>
+        IO.blocking {
+          val nextState = SbtRuntime
+            .extracted(ctx.state)
+            .appendWithSession(settings(ctx, project), ctx.state)
+          ctx.withState(nextState)
+        },
+      validate = (_, _) => IO.unit
+    )
+
   private def stateWithProjectScalaVersion(
       state: sbt.State,
       ref: sbt.ProjectRef,
@@ -559,4 +1936,27 @@ class MonorepoLifecycleCompilationSpec extends CatsEffectSuite {
     steps.foldLeft(IO.pure(ctx)) { (ioCtx, step) =>
       ioCtx.flatMap(currentCtx => step.execute(currentCtx, project))
     }
+}
+
+private[monorepo] final class PublishPreparationTestVcs(
+    override val baseDir: File
+) extends Vcs {
+  override def commandName: String                                                         = "test"
+  override def currentHash: IO[String]                                                     = IO.pure("publish-test-hash")
+  override def currentBranch: IO[String]                                                   = IO.pure("main")
+  override def trackingRemote: IO[String]                                                  = IO.pure("origin")
+  override def upstreamTrackingHash: IO[Option[String]]                                    = IO.pure(None)
+  override def hasUpstream: IO[Boolean]                                                    = IO.pure(false)
+  override def isBehindRemote: IO[Boolean]                                                 = IO.pure(false)
+  override def existsTag(name: String): IO[Boolean]                                        = IO.pure(false)
+  override def modifiedFiles: IO[Seq[String]]                                              = IO.pure(Seq.empty)
+  override def stagedFiles: IO[Seq[String]]                                                = IO.pure(Seq.empty)
+  override def untrackedFiles: IO[Seq[String]]                                             = IO.pure(Seq.empty)
+  override def status: IO[String]                                                          = IO.pure("")
+  override def checkRemote(remote: String): IO[Int]                                        = IO.pure(0)
+  override def add(files: String*): IO[Unit]                                               = IO.unit
+  override def commit(message: String, sign: Boolean, signOff: Boolean): IO[Unit]          = IO.unit
+  override def tag(name: String, comment: String, sign: Boolean, force: Boolean): IO[Unit] =
+    IO.unit
+  override def pushChanges: IO[Unit]                                                       = IO.unit
 }

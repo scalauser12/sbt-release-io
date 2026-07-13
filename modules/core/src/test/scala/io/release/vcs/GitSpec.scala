@@ -479,6 +479,67 @@ class GitSpec extends CatsEffectSuite {
     }
   }
 
+  test("tagRefHash - return the annotated tag object without peeling it") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-tag-ref-annotated").use { repo =>
+      for {
+        values           <- IO.blocking {
+                              TestSupport.runGit(repo, "tag", "-a", "-m", "release", "v1.0.0")
+                              val head      = TestSupport.runGit(repo, "rev-parse", "HEAD").trim
+                              val tagObject =
+                                TestSupport.runGit(repo, "rev-parse", "refs/tags/v1.0.0").trim
+                              head -> tagObject
+                            }
+        (head, tagObject) = values
+        refHash          <- new Git(repo).tagRefHash("v1.0.0")
+        localRef         <- new Git(repo).localTagRef("v1.0.0")
+        commitHash       <- new Git(repo).tagCommitHash("v1.0.0")
+      } yield {
+        assertEquals(refHash, Some(tagObject))
+        assertEquals(localRef, LocalTagRef.At(tagObject))
+        assertEquals(commitHash, Some(head))
+        assertNotEquals(tagObject, head)
+      }
+    }
+  }
+
+  test("tagRefHash - return the commit for a lightweight tag") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-tag-ref-lightweight").use { repo =>
+      for {
+        head    <- IO.blocking {
+                     TestSupport.runGit(repo, "tag", "v1.0.0")
+                     TestSupport.runGit(repo, "rev-parse", "HEAD").trim
+                   }
+        refHash <- new Git(repo).tagRefHash("v1.0.0")
+      } yield assertEquals(refHash, Some(head))
+    }
+  }
+
+  test("tagRefHash - return None when the tag does not exist") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-missing-tag-ref").use { repo =>
+      new Git(repo).tagRefHash("v1.0.0").map(result => assertEquals(result, None))
+    }
+  }
+
+  test("localTagRef - return authoritative Absent when the exact tag ref does not exist") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-missing-local-tag-ref").use { repo =>
+      new Git(repo)
+        .localTagRef("v1.0.0")
+        .map(result => assertEquals(result, LocalTagRef.Absent))
+    }
+  }
+
+  test("localTagRef - surface command failures instead of treating them as absent") {
+    TestSupport.tempDirResource(s"$fixturePrefix-local-tag-ref-command-failure").use { dir =>
+      assertFailure[IllegalStateException, LocalTagRef](
+        new Git(dir).localTagRef("v1.0.0")
+      ) { err =>
+        assert(err.getMessage.contains("git show-ref"))
+        assert(err.getMessage.contains("refs/tags/v1.0.0"))
+        assert(err.getMessage.contains("failed with exit code"))
+      }
+    }
+  }
+
   test("existsTag - return true when the tag exists") {
     TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-existing-tag").use { repo =>
       for {
@@ -610,6 +671,112 @@ class GitSpec extends CatsEffectSuite {
         new Git(repo)
           .remoteTagCommitWithTimeout(unreachable, "v1.0.0", 10.seconds)
           .map(result => assertEquals(result, RemoteTagCommit.Unavailable))
+    }
+  }
+
+  test("remoteTagRefWithTimeout - return the exact annotated tag object") {
+    TestSupport.gitRepoWithBareRemoteResource(s"$fixturePrefix-remote-tag-ref-annotated").use {
+      case (repo, _) =>
+        for {
+          localRef <- IO.blocking {
+                        TestSupport.runGit(repo, "tag", "-a", "-m", "release", "v1.0.0")
+                        TestSupport.runGit(repo, "push", "origin", "v1.0.0")
+                        TestSupport.runGit(repo, "rev-parse", "refs/tags/v1.0.0").trim
+                      }
+          result   <- new Git(repo).remoteTagRefWithTimeout("origin", "v1.0.0", 30.seconds)
+        } yield assertEquals(result, RemoteTagRef.At(localRef))
+    }
+  }
+
+  test("remoteTagRefWithTimeout - return the commit for a lightweight tag") {
+    TestSupport.gitRepoWithBareRemoteResource(s"$fixturePrefix-remote-tag-ref-lightweight").use {
+      case (repo, _) =>
+        for {
+          head   <- IO.blocking {
+                      TestSupport.runGit(repo, "tag", "v1.0.0")
+                      TestSupport.runGit(repo, "push", "origin", "v1.0.0")
+                      TestSupport.runGit(repo, "rev-parse", "HEAD").trim
+                    }
+          result <- new Git(repo).remoteTagRefWithTimeout("origin", "v1.0.0", 30.seconds)
+        } yield assertEquals(result, RemoteTagRef.At(head))
+    }
+  }
+
+  test("remoteTagRefWithTimeout - distinguish annotated tag objects on the same commit") {
+    TestSupport
+      .gitRepoWithBareRemoteResource(s"$fixturePrefix-remote-tag-ref-divergent-annotated")
+      .use { case (repo, _) =>
+        val git = new Git(repo)
+        for {
+          head         <- IO.blocking {
+                            TestSupport.runGit(repo, "tag", "-a", "-m", "remote release", "v1.0.0")
+                            TestSupport.runGit(repo, "push", "origin", "v1.0.0")
+                            TestSupport.runGit(repo, "tag", "-d", "v1.0.0")
+                            TestSupport.runGit(repo, "tag", "-a", "-m", "local release", "v1.0.0")
+                            TestSupport.runGit(repo, "rev-parse", "HEAD").trim
+                          }
+          localRef     <- git.tagRefHash("v1.0.0")
+          remoteRef    <- git.remoteTagRefWithTimeout("origin", "v1.0.0", 30.seconds)
+          localCommit  <- git.tagCommitHash("v1.0.0")
+          remoteCommit <- git.remoteTagCommitWithTimeout("origin", "v1.0.0", 30.seconds)
+        } yield {
+          assertEquals(localCommit, Some(head))
+          assertEquals(remoteCommit, RemoteTagCommit.At(head))
+          (localRef, remoteRef) match {
+            case (Some(localHash), RemoteTagRef.At(remoteHash)) =>
+              assertNotEquals(localHash, remoteHash)
+            case other                                          =>
+              fail(s"Expected local and remote tag refs, got: $other")
+          }
+        }
+      }
+  }
+
+  test("remoteTagRefWithTimeout - distinguish a lightweight tag from an annotated remote") {
+    TestSupport
+      .gitRepoWithBareRemoteResource(s"$fixturePrefix-remote-tag-ref-lightweight-vs-annotated")
+      .use { case (repo, _) =>
+        val git = new Git(repo)
+        for {
+          head         <- IO.blocking {
+                            TestSupport.runGit(repo, "tag", "-a", "-m", "remote release", "v1.0.0")
+                            TestSupport.runGit(repo, "push", "origin", "v1.0.0")
+                            TestSupport.runGit(repo, "tag", "-d", "v1.0.0")
+                            TestSupport.runGit(repo, "tag", "v1.0.0")
+                            TestSupport.runGit(repo, "rev-parse", "HEAD").trim
+                          }
+          localRef     <- git.tagRefHash("v1.0.0")
+          remoteRef    <- git.remoteTagRefWithTimeout("origin", "v1.0.0", 30.seconds)
+          localCommit  <- git.tagCommitHash("v1.0.0")
+          remoteCommit <- git.remoteTagCommitWithTimeout("origin", "v1.0.0", 30.seconds)
+        } yield {
+          assertEquals(localRef, Some(head))
+          assertEquals(localCommit, Some(head))
+          assertEquals(remoteCommit, RemoteTagCommit.At(head))
+          remoteRef match {
+            case RemoteTagRef.At(remoteHash) => assertNotEquals(remoteHash, head)
+            case other                       => fail(s"Expected remote tag ref, got: $other")
+          }
+        }
+      }
+  }
+
+  test("remoteTagRefWithTimeout - return Absent when the remote has no such tag") {
+    TestSupport.gitRepoWithBareRemoteResource(s"$fixturePrefix-remote-tag-ref-absent").use {
+      case (repo, _) =>
+        new Git(repo)
+          .remoteTagRefWithTimeout("origin", "v9.9.9", 30.seconds)
+          .map(result => assertEquals(result, RemoteTagRef.Absent))
+    }
+  }
+
+  test("remoteTagRefWithTimeout - return Unavailable when the remote URL is unreachable") {
+    TestSupport.gitRepoWithCommitResource(s"$fixturePrefix-remote-tag-ref-unreachable").use {
+      repo =>
+        val unreachable = new File(repo, "nonexistent-bare.git").getAbsolutePath
+        new Git(repo)
+          .remoteTagRefWithTimeout(unreachable, "v1.0.0", 10.seconds)
+          .map(result => assertEquals(result, RemoteTagRef.Unavailable))
     }
   }
 

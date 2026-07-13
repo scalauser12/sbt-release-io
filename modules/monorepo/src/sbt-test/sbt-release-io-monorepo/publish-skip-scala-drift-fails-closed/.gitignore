@@ -1,0 +1,9 @@
+target/
+project/target/
+project/project/
+global/
+*.class
+*.log
+after-release-hook-ran
+publish-skip-ran
+published

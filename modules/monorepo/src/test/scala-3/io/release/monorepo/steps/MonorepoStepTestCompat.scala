@@ -8,6 +8,7 @@ import sbt.{Setting, *}
 import sbt.protocol.testing.codec.TestResultFormats
 
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 import _root_.io.release.runtime.sbt.SbtCompat
 
 // Source-split because sbt 1 and sbt 2 expose different test task result types and caching needs.
@@ -121,8 +122,152 @@ private[monorepo] object MonorepoStepTestCompat:
       nextFn
     }
 
+  def countedVersionTaskSettings(
+      project: ProjectRef,
+      releaseCalls: AtomicInteger,
+      nextCalls: AtomicInteger
+  ): Seq[Setting[?]] =
+    Seq(
+      project / ReleaseSharedKeys.releaseIOVersioningReleaseVersion := Def.uncached {
+        releaseCalls.incrementAndGet()
+        val releaseFn: String => String = _.stripSuffix("-SNAPSHOT")
+        releaseFn
+      },
+      project / ReleaseSharedKeys.releaseIOVersioningNextVersion    := Def.uncached {
+        nextCalls.incrementAndGet()
+        val nextFn: String => String = _ => "0.2.0-SNAPSHOT"
+        nextFn
+      }
+    )
+
   def throwingPublishSkipSetting: Setting[?] =
     publish / skip := { throw new RuntimeException("publish/skip eval error"); false }
+
+  def firstPublishSkipEvaluationReturnsTrue(marker: File): Setting[?] =
+    publish / skip := Def
+      .task[Boolean] {
+        val evaluations = if marker.exists() then sbt.IO.read(marker).trim.toInt else 0
+        sbt.IO.write(marker, (evaluations + 1).toString)
+        evaluations == 0
+      }
+      .value
+
+  def countedPublishSkipSetting(marker: File, skipped: Boolean): Setting[?] =
+    publish / skip := Def
+      .task[Boolean] {
+        val evaluations = if marker.exists() then sbt.IO.read(marker).trim.toInt else 0
+        sbt.IO.write(marker, (evaluations + 1).toString)
+        skipped
+      }
+      .value
+
+  def countedProjectPublishSkipSetting(
+      project: ProjectRef,
+      marker: File,
+      skipped: Boolean
+  ): Setting[?] =
+    project / publish / skip := Def
+      .task[Boolean] {
+        val evaluations = if marker.exists() then sbt.IO.read(marker).trim.toInt else 0
+        sbt.IO.write(marker, (evaluations + 1).toString)
+        skipped
+      }
+      .value
+
+  def observedPublishSkipSetting(
+      project: ProjectRef,
+      marker: File,
+      skipped: Boolean
+  ): Setting[?] =
+    project / publish / skip := Def
+      .task[Boolean] {
+        sbt.IO.touch(marker)
+        skipped
+      }
+      .value
+
+  def publishSkipWithScalaStateMutation(
+      project: ProjectRef,
+      nextScalaVersion: String,
+      skipped: Boolean
+  ): Setting[?] =
+    project / publish / skip := Def
+      .task[Boolean](skipped)
+      .updateState { (state: State, _: Boolean) =>
+        _root_.io.release.runtime.sbt.SbtRuntime.appendWithSession(
+          state,
+          Seq(project / scalaVersion := nextScalaVersion)
+        )
+      }
+      .value
+
+  def publishSkipWithConditionalTargetStateMutation(
+      project: ProjectRef,
+      enabledKey: AttributeKey[Boolean],
+      target: Resolver
+  ): Setting[?] =
+    project / publish / skip := Def
+      .task[Boolean](false)
+      .updateState { (state: State, _: Boolean) =>
+        if state.get(enabledKey).contains(true) then
+          _root_.io.release.runtime.sbt.SbtRuntime.appendWithSession(
+            state,
+            Seq(project / publishTo := Some(target))
+          )
+        else state
+      }
+      .value
+
+  def publishActionWithScalaStateMutation(
+      project: ProjectRef,
+      nextScalaVersion: String,
+      marker: File
+  ): Setting[?] =
+    project / ReleaseSharedKeys.releaseIOPublishAction := Def
+      .task[Unit] {
+        sbt.IO.touch(marker)
+      }
+      .updateState { (state: State, _: Unit) =>
+        _root_.io.release.runtime.sbt.SbtRuntime.appendWithSession(
+          state,
+          Seq(project / scalaVersion := nextScalaVersion)
+        )
+      }
+      .value
+
+  def publishActionWithPersistentScalaStateMutation(
+      project: ProjectRef,
+      nextScalaVersion: String,
+      marker: File
+  ): Setting[?] =
+    project / ReleaseSharedKeys.releaseIOPublishAction := Def
+      .task[Unit] {
+        sbt.IO.touch(marker)
+      }
+      .updateState { (state: State, _: Unit) =>
+        _root_.io.release.runtime.sbt.SbtRuntime.appendSessionSettings(
+          state,
+          Seq(project / scalaVersion := nextScalaVersion)
+        )
+      }
+      .value
+
+  def publishActionWithPersistentCrossScalaVersionsMutation(
+      project: ProjectRef,
+      nextCrossScalaVersions: Seq[String],
+      marker: File
+  ): Setting[?] =
+    project / ReleaseSharedKeys.releaseIOPublishAction := Def
+      .task[Unit](())
+      .updateState { (state: State, _: Unit) =>
+        val liveScalaVersion = Project.extract(state).get(project / scalaVersion)
+        sbt.IO.append(marker, s"$liveScalaVersion\n")
+        _root_.io.release.runtime.sbt.SbtRuntime.appendSessionSettings(
+          state,
+          Seq(project / crossScalaVersions := nextCrossScalaVersions)
+        )
+      }
+      .value
 
   def failureCommandPublishSkipSetting(
       marker: File,

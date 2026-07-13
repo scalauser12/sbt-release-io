@@ -1,0 +1,12 @@
+target/
+project/target/
+project/project/
+global/
+*.class
+*.log
+repo/
+publish-skip-scalas
+restored-scala
+before-publish-scala
+published-scala
+after-publish-scala
