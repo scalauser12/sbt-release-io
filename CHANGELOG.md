@@ -4,6 +4,67 @@ This changelog aggregates the published GitHub releases for
 [`scalauser12/sbt-release-io`](https://github.com/scalauser12/sbt-release-io).
 This file is the canonical release history for the repository.
 
+## v0.13.6
+
+Published: 2026-07-13
+GitHub release:
+[v0.13.6](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.13.6)
+
+`v0.13.6` is a patch release for both plugins that hardens monorepo tag and
+publish validation, makes version commits atomic, and simplifies internal
+workflows while preserving public APIs.
+
+### Compatibility notes
+
+- No public API removals or source incompatibilities are intended in this
+  release.
+- The public monorepo plugin keeps its canonical selection-aware lifecycle;
+  unsupported package-private workflows without a selection boundary now fail
+  fast instead of using an unreachable compatibility path.
+- Releases remain published only from pushed `v*` tags through GitHub Actions.
+
+### Fixes
+
+- Validate each selected project's tag name as one deterministic batch before
+  release writes and again after tag-changing hooks, rejecting duplicate or
+  invalid final names before the first tag is created.
+- Recheck kept tags using exact local and remote tag ref objects, so missing
+  local refs and divergent annotated tags abort before publish even when both
+  tags peel to the same commit.
+- Keep validation-time `publish / skip` decisions authoritative per project and
+  Scala version, fail closed for empty or unvalidated iterations, and preserve
+  correct after-publish attribution across retries, aliases, cross-build drift,
+  and restored hook state.
+- Preserve hook-installed late-bound version-file settings across persistent
+  session updates, including no-op version commits.
+- Stage, inspect, conditionally commit, resolve `HEAD`, and verify cleanliness
+  in one uncancelable version-commit operation.
+
+### Improvements
+
+- Require exactly one internal monorepo selection boundary and remove the
+  unreachable boundary-less lifecycle and transient-setting bridge.
+- Consolidate publish validation and execution metadata into one structured
+  state model, and separate publish, verification, and tag workflow effects
+  from step declarations.
+- Simplify tag reservations, project selection, change-diff caching, hook
+  registries, and shared helper implementations without changing their public
+  settings or policy surfaces.
+
+### Documentation
+
+- Document the mandatory selection boundary and the consolidated monorepo
+  lifecycle behavior.
+- Refresh the root README, module READMEs, and published
+  walkthrough/getting-started docs to reference `0.13.6`.
+
+### Verification
+
+- `git diff --check`
+- GitHub Actions on `main`: formatting checks; sbt 1.12.3 and sbt 2.0.0 unit
+  tests; core and monorepo scripted tests on both sbt lines; publish-local smoke
+  on both sbt lines.
+
 ## v0.13.5
 
 Published: 2026-07-08

@@ -17,10 +17,10 @@ validate-then-execute phases, per-project tags, cross-build, and
 `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.13.5")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.13.6")
 ```
 
-> **Note:** This README describes the current published monorepo contract in `v0.13.5`; see
+> **Note:** This README describes the current published monorepo contract in `v0.13.6`; see
 > [CHANGELOG.md](../../CHANGELOG.md) for the full release history.
 
 `build.sbt` (root):
