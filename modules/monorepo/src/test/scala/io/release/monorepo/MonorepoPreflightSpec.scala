@@ -8,12 +8,14 @@ import io.release.ReleaseSharedKeys.*
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
 import io.release.monorepo.internal.*
+import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
 import io.release.monorepo.internal.MonorepoStepAliases.GlobalStep
 import io.release.monorepo.internal.MonorepoStepAliases.ProjectStep
 import io.release.monorepo.internal.steps.MonorepoReleaseSteps
 import io.release.monorepo.internal.steps.MonorepoStepTestCompat
-import io.release.monorepo.internal.steps.MonorepoVcsSteps
+import io.release.monorepo.internal.steps.MonorepoTagWorkflow
 import io.release.runtime.command.HelpDocsLinks
+import io.release.runtime.engine.BuiltInStepRole
 import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.SbtRuntime
 import munit.CatsEffectSuite
@@ -22,6 +24,15 @@ import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 
 class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSupport {
+
+  private val selectionBoundary: GlobalStep = ProcessStep.Single[MonorepoContext](
+    name = MonorepoComposer.SelectionBoundary,
+    execute = ctx => IO.pure(ctx),
+    roles = Set(BuiltInStepRole.SelectionBoundary)
+  )
+
+  private def withSelectionBoundary(steps: AnyStep*): Seq[AnyStep] =
+    selectionBoundary +: steps
 
   test("renderSummary - include selection and per-project tag summaries") {
     val summary = MonorepoPreflight.Summary(
@@ -329,7 +340,10 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
                           mutatedCtx
                         )
         _            <- assertFailure[IllegalStateException, MonorepoPreflight.Summary](
-                          MonorepoPreflight.check(session, Seq(MonorepoReleaseSteps.inquireVersions))
+                          MonorepoPreflight.check(
+                            session,
+                            withSelectionBoundary(MonorepoReleaseSteps.inquireVersions)
+                          )
                         ) { err =>
                           assert(marker.exists())
                           assert(err.getMessage.contains(releaseIOVersioningReleaseVersion.key.label))
@@ -563,56 +577,6 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
     }
   }
 
-  test("check - validate only the stable hook prefix in a no-boundary custom process") {
-    preflightFixtureResource.use { case (_, ctx, _) =>
-      for {
-        firstValidated  <- Ref.of[IO, Int](0)
-        firstExecuted   <- Ref.of[IO, Int](0)
-        secondValidated <- Ref.of[IO, Int](0)
-        firstHook        = ProcessStep.Single[MonorepoContext](
-                             name = "after-clean-check:install-custom-state",
-                             execute = current => firstExecuted.update(_ + 1).as(current),
-                             validate = _ => firstValidated.update(_ + 1)
-                           )
-        dependentHook    = ProcessStep.Single[MonorepoContext](
-                             name = "before-selection:require-custom-state",
-                             execute = current => IO.pure(current),
-                             validate = _ =>
-                               secondValidated.update(_ + 1) *>
-                                 firstExecuted.get.flatMap {
-                                   case 0 =>
-                                     IO.raiseError(
-                                       new IllegalStateException(
-                                         "dependent no-boundary validation observed stale state"
-                                       )
-                                     )
-                                   case _ => IO.unit
-                                 }
-                           )
-        session          = MonorepoPreparedSession(ctx.state, ctx.releasePlan.get, ctx)
-        summary         <- MonorepoPreflight.check(
-                             session,
-                             Seq(firstHook, dependentHook, MonorepoReleaseSteps.inquireVersions)
-                           )
-        firstV          <- firstValidated.get
-        firstE          <- firstExecuted.get
-        secondV         <- secondValidated.get
-      } yield {
-        assertEquals(firstV, 1)
-        assertEquals(firstE, 0)
-        assertEquals(secondV, 0)
-        assertEquals(
-          summary.projects.map(_.versions),
-          Seq(
-            MonorepoPreflight.Evaluation.NotEvaluated(
-              MonorepoPreflight.VersionsRuntimeHookState
-            )
-          )
-        )
-      }
-    }
-  }
-
   test("check - fail fast when validation returns ctx.failWith") {
     preflightFixtureResource.use { case (_, ctx, _) =>
       val session     = MonorepoPreparedSession(ctx.state, ctx.releasePlan.get, ctx)
@@ -624,7 +588,7 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
         )
 
       assertFailure[RuntimeException, MonorepoPreflight.Summary](
-        MonorepoPreflight.check(session, Seq(failingStep))
+        MonorepoPreflight.check(session, withSelectionBoundary(failingStep))
       )(err => assert(err.getMessage.contains("fatal stop")))
     }
   }
@@ -1656,7 +1620,7 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
       MonorepoPreflight
         .check(
           session,
-          Seq(MonorepoReleaseSteps.checkCleanWorkingDir)
+          withSelectionBoundary(MonorepoReleaseSteps.checkCleanWorkingDir)
         )
         .map { summary =>
           assertEquals(
@@ -1678,14 +1642,17 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
     }
   }
 
-  test("check - bootstrap built-in initialize-vcs for custom no-boundary validations") {
+  test("check - bootstrap built-in initialize-vcs when built-in selection is omitted") {
     preflightFixtureResource.use { case (_, ctx, _) =>
       val session = MonorepoPreparedSession(ctx.state, ctx.releasePlan.get, ctx)
 
       MonorepoPreflight
         .check(
           session,
-          Seq(MonorepoReleaseSteps.initializeVcs, requiresVcsValidationStep)
+          withSelectionBoundary(
+            MonorepoReleaseSteps.initializeVcs,
+            requiresVcsValidationStep
+          )
         )
         .map { summary =>
           assertEquals(
@@ -1707,7 +1674,7 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
     }
   }
 
-  test("check - fail no-boundary validations before built-in version resolution is attempted") {
+  test("check - fail validations before version resolution when built-in selection is omitted") {
     preflightFixtureResource.use { case (repo, ctx, _) =>
       val versionResolutionFailure = "version resolution should not run"
 
@@ -1733,7 +1700,7 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
         _            <- assertFailure[IllegalStateException, MonorepoPreflight.Summary](
                           MonorepoPreflight.check(
                             session,
-                            Seq(
+                            withSelectionBoundary(
                               MonorepoReleaseSteps.checkCleanWorkingDir,
                               MonorepoReleaseSteps.inquireVersions
                             )
@@ -1746,14 +1713,14 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
     }
   }
 
-  test("check - validate no-boundary suffix steps after built-in version resolution") {
+  test("check - validate suffix steps after version resolution without built-in selection") {
     preflightFixtureResource.use { case (_, ctx, _) =>
       val session = MonorepoPreparedSession(ctx.state, ctx.releasePlan.get, ctx)
 
       MonorepoPreflight
         .check(
           session,
-          Seq(
+          withSelectionBoundary(
             MonorepoReleaseSteps.inquireVersions,
             requiresResolvedVersionsValidationStep
           )
@@ -1779,7 +1746,7 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
   }
 
   test(
-    "check - keep no-boundary tag preflight and rendered projects aligned after validation updates"
+    "check - keep tag preflight and projects aligned when built-in selection is omitted"
   ) {
     multiProjectPreflightFixtureResource.use { case (_, ctx) =>
       val session = MonorepoPreparedSession(ctx.state, ctx.releasePlan.get, ctx)
@@ -1787,7 +1754,7 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
       MonorepoPreflight
         .check(
           session,
-          Seq(
+          withSelectionBoundary(
             MonorepoReleaseSteps.inquireVersions,
             narrowProjectsInValidationStep("core"),
             MonorepoReleaseSteps.tagReleasesPerProject
@@ -1822,7 +1789,7 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
   }
 
   test(
-    "check - keep no-boundary tags not evaluated when tag-releases appears before inquire-versions"
+    "check - defer tags when tag-releases precedes versions without built-in selection"
   ) {
     preflightFixtureResource.use { case (_, ctx, _) =>
       val session = MonorepoPreparedSession(ctx.state, ctx.releasePlan.get, ctx)
@@ -1830,7 +1797,7 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
       MonorepoPreflight
         .check(
           session,
-          Seq(
+          withSelectionBoundary(
             MonorepoReleaseSteps.tagReleasesPerProject,
             MonorepoReleaseSteps.inquireVersions
           )
@@ -1864,13 +1831,13 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
   }
 
   test(
-    "check - fail custom no-boundary validations that require VCS when initialize-vcs is absent"
+    "check - fail custom validations requiring VCS when built-in selection and init are omitted"
   ) {
     preflightFixtureResource.use { case (_, ctx, _) =>
       val session = MonorepoPreparedSession(ctx.state, ctx.releasePlan.get, ctx)
 
       assertFailure[IllegalStateException, MonorepoPreflight.Summary](
-        MonorepoPreflight.check(session, Seq(requiresVcsValidationStep))
+        MonorepoPreflight.check(session, withSelectionBoundary(requiresVcsValidationStep))
       )(err => assert(err.getMessage.contains("expected preflight VCS context")))
     }
   }
@@ -1883,11 +1850,11 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
       )
       val tags     = MonorepoPreflight.Evaluation.Resolved(
         Seq(
-          MonorepoVcsSteps
+          MonorepoTagWorkflow
             .PreflightTagOutcome("core", "core/v1.0.0", "available", willCreateTag = true),
-          MonorepoVcsSteps
+          MonorepoTagWorkflow
             .PreflightTagOutcome("api", "api/v2.0.0", "available", willCreateTag = true),
-          MonorepoVcsSteps
+          MonorepoTagWorkflow
             .PreflightTagOutcome("extra", "extra/v3.0.0", "available", willCreateTag = true)
         )
       )
@@ -2026,7 +1993,7 @@ class MonorepoPreflightSpec extends CatsEffectSuite with MonorepoDummyProjectSup
               releaseVersion.nonEmpty && nextVersion.nonEmpty
           })
         )(
-          new IllegalStateException("expected resolved versions during no-boundary validation")
+          new IllegalStateException("expected resolved versions during custom validation")
         )
     )
 

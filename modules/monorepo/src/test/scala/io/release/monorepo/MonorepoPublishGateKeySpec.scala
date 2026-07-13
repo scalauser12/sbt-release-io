@@ -2,7 +2,7 @@ package io.release.monorepo
 
 import cats.effect.IO
 import io.release.TestSupport
-import io.release.monorepo.internal.steps.MonorepoPublishSteps
+import io.release.monorepo.internal.steps.MonorepoPublishWorkflow
 import io.release.runtime.sbt.SbtRuntime
 import munit.CatsEffectSuite
 import sbt.Keys.*
@@ -10,7 +10,7 @@ import sbt.{internal as _, *}
 
 import java.io.File
 
-/** Regression coverage for [[MonorepoPublishSteps.publishGateKey]]. The cache key has to
+/** Regression coverage for [[MonorepoPublishWorkflow.publishGateKey]]. The cache key has to
   * distinguish cross-build iterations so the frozen publish-skip decision is recomputed
   * each iteration. Scoping the `scalaVersion` lookup to `project.ref` matters because
   * cross-build only switches per-project (not the unscoped `Keys.scalaVersion`, which
@@ -65,32 +65,31 @@ class MonorepoPublishGateKeySpec extends CatsEffectSuite {
           ctxA            <- installCoreScala(coreScalaA)
           ctxB            <- installCoreScala(coreScalaB)
           ctxC            <- installCoreScala(coreScalaC)
-          keyA             = MonorepoPublishSteps.publishGateKey(ctxA, coreProject)
-          keyB             = MonorepoPublishSteps.publishGateKey(ctxB, coreProject)
+          keyA             = MonorepoPublishWorkflow.publishGateKey(ctxA, coreProject)
+          keyB             = MonorepoPublishWorkflow.publishGateKey(ctxB, coreProject)
+          eligibilityA     = MonorepoContext.PublishIteration(coreProject.ref, coreScalaA)
+          eligibilityB     = MonorepoContext.PublishIteration(coreProject.ref, coreScalaB)
+          foreignA         = MonorepoContext.PublishIteration(foreignCoreRef, coreScalaA)
           eligibilityCtx   = ctxA
                                .recordValidatedPublishEligibility(
-                                 coreProject.ref,
-                                 coreScalaA,
+                                 eligibilityA,
                                  eligible = false
                                )
                                .recordValidatedPublishEligibility(
-                                 coreProject.ref,
-                                 coreScalaA,
+                                 eligibilityA,
                                  eligible = true
                                )
                                .withState(ctxB.state)
                                .recordValidatedPublishEligibility(
-                                 coreProject.ref,
-                                 coreScalaB,
+                                 eligibilityB,
                                  eligible = true
                                )
                                .recordValidatedPublishEligibility(
-                                 foreignCoreRef,
-                                 coreScalaA,
+                                 foreignA,
                                  eligible = true
                                )
           missingCtx       = eligibilityCtx.withState(ctxC.state)
-          missingGate     <- MonorepoPublishSteps.shouldRunPublishHooksAtExecute(
+          missingGate     <- MonorepoPublishWorkflow.shouldRunPublishHooksAtExecute(
                                missingCtx,
                                coreProject
                              )
@@ -134,19 +133,19 @@ class MonorepoPublishGateKeySpec extends CatsEffectSuite {
           assert(!ctxA.hasValidatedPublishEligibilitySnapshot)
           assert(eligibilityCtx.hasValidatedPublishEligibilitySnapshot)
           assertEquals(
-            eligibilityCtx.validatedPublishEligibility(coreProject.ref, coreScalaA),
+            eligibilityCtx.validatedPublishEligibility(eligibilityA),
             Some(false)
           )
           assertEquals(
-            eligibilityCtx.validatedPublishEligibility(coreProject.ref, coreScalaB),
+            eligibilityCtx.validatedPublishEligibility(eligibilityB),
             Some(true)
           )
           assertEquals(
-            eligibilityCtx.validatedPublishEligibility(coreProject.ref, coreScalaC),
+            eligibilityCtx.validatedPublishEligibility(iterationC),
             None
           )
           assertEquals(
-            eligibilityCtx.validatedPublishEligibility(foreignCoreRef, coreScalaA),
+            eligibilityCtx.validatedPublishEligibility(foreignA),
             Some(true),
             "same-named projects in different builds must have independent eligibility"
           )
@@ -157,11 +156,11 @@ class MonorepoPublishGateKeySpec extends CatsEffectSuite {
             "a successful A attempt must retain A's frozen key when the task restores live A"
           )
           assertEquals(
-            MonorepoPublishSteps.afterPublishGateKey(restoredCtx, coreProject),
+            MonorepoPublishWorkflow.afterPublishGateKey(restoredCtx, coreProject),
             keyA,
             "the frozen gate must use the successful attempt identity"
           )
-          assert(MonorepoPublishSteps.didPublishForAfterHook(restoredCtx, coreProject))
+          assert(MonorepoPublishWorkflow.didPublishForAfterHook(restoredCtx, coreProject))
           assertEquals(
             returnedOutcome,
             MonorepoContext.AfterPublishOutcome(iterationA, succeeded = true),
@@ -184,12 +183,12 @@ class MonorepoPublishGateKeySpec extends CatsEffectSuite {
               "matches another attempt's successful hook source"
           )
           assertEquals(
-            MonorepoPublishSteps.afterPublishGateKey(convergedSkipCtx, coreProject),
+            MonorepoPublishWorkflow.afterPublishGateKey(convergedSkipCtx, coreProject),
             keyB,
             "converging attempt and source identities should retain one frozen key"
           )
           assert(
-            !MonorepoPublishSteps.didPublishForAfterHook(convergedSkipCtx, coreProject),
+            !MonorepoPublishWorkflow.didPublishForAfterHook(convergedSkipCtx, coreProject),
             "the converged skipped attempt must not run afterPublish a second time"
           )
         }
@@ -239,7 +238,6 @@ class MonorepoPublishGateKeySpec extends CatsEffectSuite {
         val expected   = MonorepoContext.AfterPublishOutcome(unknown, succeeded = false)
 
         assertEquals(successful.afterPublishOutcome(unknown), expected)
-        assertEquals(successful.currentPublishExecutionOutcome(unknown), Some(expected))
       }
     }
   }
@@ -267,6 +265,29 @@ class MonorepoPublishGateKeySpec extends CatsEffectSuite {
         assertEquals(
           execution.afterPublishOutcome(failedAlias),
           MonorepoContext.AfterPublishOutcome(failedAlias, succeeded = false)
+        )
+      }
+    }
+  }
+
+  test("a retried attempt replaces its previous successful outcome") {
+    probeContextResource("monorepo-after-publish-retry-replaces-success").use { ctx =>
+      IO {
+        val ref         = ctx.currentProjects.head.ref
+        val attempt     = MonorepoContext.PublishIteration(ref, "attempt")
+        val formerAlias = MonorepoContext.PublishIteration(ref, "former-alias")
+        val retried     = ctx.beginPublishExecutionBatch
+          .recordPublishAttempt(attempt)
+          .recordPublishSucceeded(attempt, attempt, attempt, formerAlias)
+          .recordPublishAttempt(attempt)
+
+        assertEquals(
+          retried.afterPublishOutcome(attempt),
+          MonorepoContext.AfterPublishOutcome(attempt, succeeded = false)
+        )
+        assertEquals(
+          retried.afterPublishOutcome(formerAlias),
+          MonorepoContext.AfterPublishOutcome(formerAlias, succeeded = false)
         )
       }
     }
@@ -311,70 +332,6 @@ class MonorepoPublishGateKeySpec extends CatsEffectSuite {
     }
   }
 
-  test("after-publish validation reuses the current successful attempt gate") {
-    probeContextResource("monorepo-after-publish-current-outcome").use { ctx =>
-      val project    = ctx.currentProjects.head
-      val ref        = project.ref
-      val iterationA = MonorepoContext.PublishIteration(ref, TestSupport.CurrentScalaVersion)
-      val iterationB = MonorepoContext.PublishIteration(ref, TestSupport.alternateScalaVersion)
-      val stateB     = TestSupport.appendSessionSettings(
-        ctx.state,
-        Seq(ref / scalaVersion := iterationB.scalaVersion)
-      )
-
-      def validationProbe(publishSkipped: Boolean) =
-        MonorepoContext.PublishValidationProbe(
-          input = iterationA,
-          entry = iterationA,
-          postSkip = iterationA,
-          publishSkipped = publishSkipped,
-          pendingTargetState = None,
-          targetValidated = true
-        )
-
-      def successfulAttempt(base: MonorepoContext) =
-        base.beginPublishExecutionBatch
-          .recordPublishAttempt(iterationA)
-          .recordPublishSucceeded(
-            attemptIteration = iterationA,
-            actionIteration = iterationA,
-            hookSource = iterationA,
-            taskReturnedIteration = iterationB
-          )
-          .withState(stateB)
-
-      val eligibleCtx = successfulAttempt(
-        ctx.recordPublishValidationProbe(validationProbe(publishSkipped = false))
-      )
-      val skippedCtx  = successfulAttempt(
-        ctx.recordPublishValidationProbe(validationProbe(publishSkipped = true))
-      )
-      val probeLess   = successfulAttempt(ctx)
-      val nextBatch   = eligibleCtx.beginPublishValidationBatch()
-
-      for {
-        eligibleGate <- MonorepoPublishSteps.afterPublishGateValidation(eligibleCtx, project)
-        skippedGate  <- MonorepoPublishSteps.afterPublishGateValidation(skippedCtx, project)
-        fallbackGate <- MonorepoPublishSteps.afterPublishGateValidation(probeLess, project)
-      } yield {
-        val expectedOutcome =
-          Some(MonorepoContext.AfterPublishOutcome(iterationA, succeeded = true))
-
-        assertEquals(eligibleCtx.currentPublishExecutionOutcome(iterationB), expectedOutcome)
-        assertEquals(eligibleCtx.validatedPublishGateDecision(iterationA), Some(true))
-        assertEquals(skippedCtx.validatedPublishGateDecision(iterationA), Some(false))
-        assertEquals(probeLess.validatedPublishGateDecision(iterationA), None)
-        assertEquals(eligibleGate.key, iterationA.gateKey)
-        assertEquals(eligibleGate.decision, true)
-        assertEquals(skippedGate.key, iterationA.gateKey)
-        assertEquals(skippedGate.decision, false)
-        assertEquals(fallbackGate.key, iterationA.gateKey)
-        assertEquals(fallbackGate.decision, true)
-        assertEquals(nextBatch.currentPublishExecutionOutcome(iterationB), None)
-      }
-    }
-  }
-
   test("publish hook gates map a pre-overlay attempt to its validation entry") {
     probeContextResource("monorepo-publish-gate-input-entry").use { ctx =>
       val project = ctx.currentProjects.head
@@ -393,8 +350,7 @@ class MonorepoPublishGateKeySpec extends CatsEffectSuite {
           entry = entry,
           postSkip = entry,
           publishSkipped = publishSkipped,
-          pendingTargetState = None,
-          targetValidated = true
+          targetProgress = MonorepoContext.PublishTargetProgress.NotRequired
         )
 
       val inputState = TestSupport.appendSessionSettings(
@@ -407,13 +363,17 @@ class MonorepoPublishGateKeySpec extends CatsEffectSuite {
           .withState(inputState)
           .beginPublishExecutionBatch
           .recordPublishAttempt(input)
-          .recordPublishSucceeded(input)
+          .recordPublishSucceeded(input, input, input, input)
 
       val eligible   = successfulAttempt(
-        ctx.recordPublishValidationProbe(validationProbe(publishSkipped = false))
+        ctx
+          .initializePublishValidation(checksEnabled = true)
+          .recordPublishValidationProbe(validationProbe(publishSkipped = false))
       )
       val skipped    = successfulAttempt(
-        ctx.recordPublishValidationProbe(validationProbe(publishSkipped = true))
+        ctx
+          .initializePublishValidation(checksEnabled = true)
+          .recordPublishValidationProbe(validationProbe(publishSkipped = true))
       )
       val unknown    = MonorepoContext.PublishIteration(project.ref, "unrelated-scala")
       val unknownCtx = eligible.withState(
@@ -424,21 +384,21 @@ class MonorepoPublishGateKeySpec extends CatsEffectSuite {
       )
 
       for {
-        eligibleGate <- MonorepoPublishSteps.afterPublishGateValidation(eligible, project)
-        skippedGate  <- MonorepoPublishSteps.afterPublishGateValidation(skipped, project)
+        eligibleGate <- MonorepoPublishWorkflow.afterPublishGateValidation(eligible, project)
+        skippedGate  <- MonorepoPublishWorkflow.afterPublishGateValidation(skipped, project)
       } yield {
-        assertEquals(MonorepoPublishSteps.publishGateKey(eligible, project), entry.gateKey)
-        assertEquals(MonorepoPublishSteps.afterPublishGateKey(eligible, project), entry.gateKey)
+        assertEquals(MonorepoPublishWorkflow.publishGateKey(eligible, project), entry.gateKey)
+        assertEquals(MonorepoPublishWorkflow.afterPublishGateKey(eligible, project), entry.gateKey)
         assertEquals(eligibleGate.key, entry.gateKey)
         assertEquals(eligibleGate.decision, true)
         assertEquals(skippedGate.key, entry.gateKey)
         assertEquals(skippedGate.decision, false)
         assertEquals(
-          MonorepoPublishSteps.publishGateKey(ctx.withState(inputState), project),
+          MonorepoPublishWorkflow.publishGateKey(ctx.withState(inputState), project),
           input.gateKey
         )
         assertEquals(
-          MonorepoPublishSteps.publishGateKey(unknownCtx, project),
+          MonorepoPublishWorkflow.publishGateKey(unknownCtx, project),
           unknown.gateKey,
           "only an exact validation-probe input should remap to the overlay entry"
         )
@@ -446,7 +406,7 @@ class MonorepoPublishGateKeySpec extends CatsEffectSuite {
     }
   }
 
-  test("publish validation probes use an entry index and accept identical collapses") {
+  test("publish validation probes accept identical entry observations") {
     probeContextResource("monorepo-publish-probe-entry-index").use { ctx =>
       IO {
         val ref      = ctx.currentProjects.head.ref
@@ -459,8 +419,7 @@ class MonorepoPublishGateKeySpec extends CatsEffectSuite {
           entry,
           postSkip,
           publishSkipped = false,
-          pendingTargetState = None,
-          targetValidated = true
+          targetProgress = MonorepoContext.PublishTargetProgress.NotRequired
         )
         val probeB   = probeA.copy(input = inputB)
         val indexed  = ctx.recordPublishValidationProbe(probeA).recordPublishValidationProbe(probeB)
@@ -486,8 +445,7 @@ class MonorepoPublishGateKeySpec extends CatsEffectSuite {
           entry,
           postSkipA,
           publishSkipped = false,
-          pendingTargetState = None,
-          targetValidated = true
+          targetProgress = MonorepoContext.PublishTargetProgress.NotRequired
         )
         val skipped    = eligible.copy(input = inputB, publishSkipped = true)
         val shifted    = eligible.copy(input = inputB, postSkip = postSkipB)

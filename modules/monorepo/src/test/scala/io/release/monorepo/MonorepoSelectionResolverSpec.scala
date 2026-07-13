@@ -68,6 +68,26 @@ class MonorepoSelectionResolverSpec extends CatsEffectSuite {
     }
   }
 
+  test("resolve - accept known overrides when every project is selected") {
+    resolverFixtureResource(
+      prefix = "monorepo-selection-all-changed-overrides",
+      rootSettings = Seq(
+        MonorepoReleasePlugin.autoImport.releaseIOMonorepoDetectionEnabled := false
+      )
+    ).use { fixture =>
+      val plan = MonorepoSpecSupport.releasePlan(
+        selectionMode = SelectionMode.DetectChanges,
+        releaseVersionOverrides = Map("api" -> "3.0.0")
+      )
+
+      MonorepoSelectionResolver.resolve(fixture.context(Seq.empty), plan).map { result =>
+        assertEquals(result.selectionMode, SelectionMode.AllChanged)
+        assertEquals(result.projects.map(_.name), Seq("core", "api", "consumer"))
+        assertEquals(result.projects.find(_.name == "api").flatMap(_.releaseVersion), Some("3.0.0"))
+      }
+    }
+  }
+
   test("resolve - avoid tag settings resolution when detectChanges is disabled") {
     resolverFixtureResource(
       prefix = "monorepo-selection-all-changed-no-tag-settings",

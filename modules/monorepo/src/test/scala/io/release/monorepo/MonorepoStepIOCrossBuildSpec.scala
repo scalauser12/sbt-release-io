@@ -5,9 +5,9 @@ import cats.effect.Ref
 import io.release.ReleaseSharedKeys
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
-import io.release.monorepo.internal.*
 import io.release.monorepo.internal.steps.MonorepoPublishSteps
 import io.release.monorepo.internal.steps.MonorepoStepTestCompat
+import io.release.monorepo.internal.steps.MonorepoVerificationSteps
 import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.SbtCompat
 import munit.CatsEffectSuite
@@ -51,8 +51,7 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
     }.use { ctx =>
       val project = MonorepoSpecSupport.projectNamed(ctx.projects, "core")
 
-      MonorepoComposer
-        .compose(Seq(MonorepoPublishSteps.publishArtifacts), crossBuild = true)(ctx)
+      composeCanonical(Seq(MonorepoPublishSteps.publishArtifacts), crossBuild = true)(ctx)
         .flatMap { result =>
           for {
             restoredScala <- projectScalaVersionOf(result.state, project.ref)
@@ -67,15 +66,16 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
             assert(result.hasValidatedPublishEligibilitySnapshot)
             assertEquals(
               result.validatedPublishEligibility(
-                project.ref,
-                TestSupport.CurrentScalaVersion
+                MonorepoContext.PublishIteration(project.ref, TestSupport.CurrentScalaVersion)
               ),
               Some(true)
             )
             assertEquals(
               result.validatedPublishEligibility(
-                project.ref,
-                TestSupport.alternateScalaVersion
+                MonorepoContext.PublishIteration(
+                  project.ref,
+                  TestSupport.alternateScalaVersion
+                )
               ),
               Some(true)
             )
@@ -120,7 +120,7 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
         enableCrossBuild = true
       )
 
-      MonorepoComposer.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
+      composeCanonical(Seq(step), crossBuild = true)(ctx).flatMap { result =>
         val project = MonorepoSpecSupport.projectNamed(result.projects, "core")
 
         for {
@@ -172,7 +172,7 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
         for {
           initialRootVersion    <- scopedScalaVersionOf(ctx.state)
           initialProjectVersion <- projectScalaVersionOf(ctx.state, project.ref)
-          result                <- MonorepoComposer.compose(Seq(step), crossBuild = true)(ctx)
+          result                <- composeCanonical(Seq(step), crossBuild = true)(ctx)
           observedVersions      <- observed.get
           restoredProject       <- projectScalaVersionOf(result.state, project.ref)
         } yield {
@@ -233,31 +233,30 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
             .as(c)
       )
 
-      MonorepoComposer.compose(Seq(crossStep, plainStep), crossBuild = true)(ctx).flatMap {
-        result =>
-          val core = MonorepoSpecSupport.projectNamed(result.projects, "core")
-          val api  = MonorepoSpecSupport.projectNamed(result.projects, "api")
+      composeCanonical(Seq(crossStep, plainStep), crossBuild = true)(ctx).flatMap { result =>
+        val core = MonorepoSpecSupport.projectNamed(result.projects, "core")
+        val api  = MonorepoSpecSupport.projectNamed(result.projects, "api")
 
-          for {
-            restoredVersion <- scalaVersionOf(result.state)
-            coreCross       <-
-              MonorepoSpecSupport.readNonEmptyLines(new File(core.baseDir, "cross-invocations.txt"))
-            apiCross        <-
-              MonorepoSpecSupport.readNonEmptyLines(new File(api.baseDir, "cross-invocations.txt"))
-            corePlain       <-
-              MonorepoSpecSupport.readNonEmptyLines(new File(core.baseDir, "plain-invocations.txt"))
-            apiPlain        <-
-              MonorepoSpecSupport.readNonEmptyLines(new File(api.baseDir, "plain-invocations.txt"))
-          } yield {
-            assertEquals(
-              coreCross,
-              List(TestSupport.CurrentScalaVersion, TestSupport.alternateScalaVersion)
-            )
-            assertEquals(apiCross, List(TestSupport.CurrentScalaVersion))
-            assertEquals(corePlain, List(TestSupport.CurrentScalaVersion))
-            assertEquals(apiPlain, List(TestSupport.CurrentScalaVersion))
-            assertEquals(restoredVersion, TestSupport.CurrentScalaVersion)
-          }
+        for {
+          restoredVersion <- scalaVersionOf(result.state)
+          coreCross       <-
+            MonorepoSpecSupport.readNonEmptyLines(new File(core.baseDir, "cross-invocations.txt"))
+          apiCross        <-
+            MonorepoSpecSupport.readNonEmptyLines(new File(api.baseDir, "cross-invocations.txt"))
+          corePlain       <-
+            MonorepoSpecSupport.readNonEmptyLines(new File(core.baseDir, "plain-invocations.txt"))
+          apiPlain        <-
+            MonorepoSpecSupport.readNonEmptyLines(new File(api.baseDir, "plain-invocations.txt"))
+        } yield {
+          assertEquals(
+            coreCross,
+            List(TestSupport.CurrentScalaVersion, TestSupport.alternateScalaVersion)
+          )
+          assertEquals(apiCross, List(TestSupport.CurrentScalaVersion))
+          assertEquals(corePlain, List(TestSupport.CurrentScalaVersion))
+          assertEquals(apiPlain, List(TestSupport.CurrentScalaVersion))
+          assertEquals(restoredVersion, TestSupport.CurrentScalaVersion)
+        }
       }
     }
   }
@@ -309,27 +308,26 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
           }
       )
 
-      MonorepoComposer.compose(Seq(crossStep, plainStep), crossBuild = true)(ctx).flatMap {
-        result =>
-          val core = MonorepoSpecSupport.projectNamed(result.projects, "core")
+      composeCanonical(Seq(crossStep, plainStep), crossBuild = true)(ctx).flatMap { result =>
+        val core = MonorepoSpecSupport.projectNamed(result.projects, "core")
 
-          for {
-            restoredVersion  <- scalaVersionOf(result.state)
-            restoredCore     <- projectScalaVersionOf(result.state, core.ref)
-            crossInvocations <-
-              MonorepoSpecSupport.readNonEmptyLines(new File(core.baseDir, "cross-invocations.txt"))
-            plainVersions    <- MonorepoSpecSupport.readNonEmptyLines(
-                                  new File(core.baseDir, "plain-project-version.txt")
-                                )
-          } yield {
-            assertEquals(
-              crossInvocations,
-              List(TestSupport.CurrentScalaVersion, TestSupport.alternateScalaVersion)
-            )
-            assertEquals(plainVersions, List(TestSupport.CurrentScalaVersion))
-            assertEquals(restoredVersion, TestSupport.CurrentScalaVersion)
-            assertEquals(restoredCore, Some(TestSupport.CurrentScalaVersion))
-          }
+        for {
+          restoredVersion  <- scalaVersionOf(result.state)
+          restoredCore     <- projectScalaVersionOf(result.state, core.ref)
+          crossInvocations <-
+            MonorepoSpecSupport.readNonEmptyLines(new File(core.baseDir, "cross-invocations.txt"))
+          plainVersions    <- MonorepoSpecSupport.readNonEmptyLines(
+                                new File(core.baseDir, "plain-project-version.txt")
+                              )
+        } yield {
+          assertEquals(
+            crossInvocations,
+            List(TestSupport.CurrentScalaVersion, TestSupport.alternateScalaVersion)
+          )
+          assertEquals(plainVersions, List(TestSupport.CurrentScalaVersion))
+          assertEquals(restoredVersion, TestSupport.CurrentScalaVersion)
+          assertEquals(restoredCore, Some(TestSupport.CurrentScalaVersion))
+        }
       }
     }
   }
@@ -366,7 +364,7 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
         enableCrossBuild = true
       )
 
-      MonorepoComposer.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
+      composeCanonical(Seq(step), crossBuild = true)(ctx).flatMap { result =>
         val project = MonorepoSpecSupport.projectNamed(result.projects, "core")
 
         for {
@@ -439,28 +437,27 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
           }
       )
 
-      MonorepoComposer.compose(Seq(crossStep, plainStep), crossBuild = true)(ctx).flatMap {
-        result =>
-          val core = MonorepoSpecSupport.projectNamed(result.projects, "core")
-          val api  = MonorepoSpecSupport.projectNamed(result.projects, "api")
+      composeCanonical(Seq(crossStep, plainStep), crossBuild = true)(ctx).flatMap { result =>
+        val core = MonorepoSpecSupport.projectNamed(result.projects, "core")
+        val api  = MonorepoSpecSupport.projectNamed(result.projects, "api")
 
-          for {
-            restoredVersion <- scalaVersionOf(result.state)
-            restoredCore    <- projectScalaVersionOf(result.state, core.ref)
-            restoredApi     <- projectScalaVersionOf(result.state, api.ref)
-            corePlain       <- MonorepoSpecSupport.readNonEmptyLines(
-                                 new File(core.baseDir, "plain-project-version.txt")
-                               )
-            apiPlain        <- MonorepoSpecSupport.readNonEmptyLines(
-                                 new File(api.baseDir, "plain-project-version.txt")
-                               )
-          } yield {
-            assertEquals(restoredVersion, TestSupport.CurrentScalaVersion)
-            assertEquals(restoredCore, Some(TestSupport.CurrentScalaVersion))
-            assertEquals(restoredApi, Some(TestSupport.alternateScalaVersion))
-            assertEquals(corePlain, List(TestSupport.CurrentScalaVersion))
-            assertEquals(apiPlain, List(TestSupport.alternateScalaVersion))
-          }
+        for {
+          restoredVersion <- scalaVersionOf(result.state)
+          restoredCore    <- projectScalaVersionOf(result.state, core.ref)
+          restoredApi     <- projectScalaVersionOf(result.state, api.ref)
+          corePlain       <- MonorepoSpecSupport.readNonEmptyLines(
+                               new File(core.baseDir, "plain-project-version.txt")
+                             )
+          apiPlain        <- MonorepoSpecSupport.readNonEmptyLines(
+                               new File(api.baseDir, "plain-project-version.txt")
+                             )
+        } yield {
+          assertEquals(restoredVersion, TestSupport.CurrentScalaVersion)
+          assertEquals(restoredCore, Some(TestSupport.CurrentScalaVersion))
+          assertEquals(restoredApi, Some(TestSupport.alternateScalaVersion))
+          assertEquals(corePlain, List(TestSupport.CurrentScalaVersion))
+          assertEquals(apiPlain, List(TestSupport.alternateScalaVersion))
+        }
       }
     }
   }
@@ -491,7 +488,7 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
       )
 
       scopedScalaVersionOf(ctx.state).flatMap { initialVersion =>
-        MonorepoComposer.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
+        composeCanonical(Seq(step), crossBuild = true)(ctx).flatMap { result =>
           val project = MonorepoSpecSupport.projectNamed(result.projects, "core")
 
           for {
@@ -543,7 +540,7 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
       )
 
       assertFailure[IllegalStateException, MonorepoContext](
-        MonorepoComposer.compose(Seq(step), crossBuild = true)(ctx)
+        composeCanonical(Seq(step), crossBuild = true)(ctx)
       ) { err =>
         assert(err.getMessage.contains("Cross-build enabled but core has empty crossScalaVersions"))
         assert(!marker.exists())
@@ -583,7 +580,7 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
           enableCrossBuild = true
         )
 
-        MonorepoComposer.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
+        composeCanonical(Seq(step), crossBuild = true)(ctx).flatMap { result =>
           observed.get.map { obs =>
             val project = MonorepoSpecSupport.projectNamed(result.projects, "core")
             assertEquals(
@@ -634,7 +631,7 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
           enableCrossBuild = true
         )
 
-        MonorepoComposer.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
+        composeCanonical(Seq(step), crossBuild = true)(ctx).flatMap { result =>
           observed.get.map { obs =>
             val project = MonorepoSpecSupport.projectNamed(result.projects, "core")
             assertEquals(
@@ -668,7 +665,7 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
             )
           )
 
-          MonorepoComposer.compose(Seq(step))(pCtx).flatMap { result =>
+          composeCanonical(Seq(step))(pCtx).flatMap { result =>
             observed.get.map { obs =>
               assert(result.failed)
               assertEquals(obs, List("core"))
@@ -717,7 +714,7 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
           enableCrossBuild = true
         )
 
-        MonorepoComposer.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
+        composeCanonical(Seq(step), crossBuild = true)(ctx).flatMap { result =>
           scalaVersionOf(result.state).flatMap { restoredVersion =>
             observed.get.map { obs =>
               assert(result.failed)
@@ -772,7 +769,7 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
           enableCrossBuild = true
         )
 
-        MonorepoComposer.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
+        composeCanonical(Seq(step), crossBuild = true)(ctx).flatMap { result =>
           scalaVersionOf(result.state).flatMap { finalVersion =>
             observed.get.map { events =>
               val core      = MonorepoSpecSupport.projectNamed(result.projects, "core")
@@ -838,7 +835,7 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
         enableCrossBuild = true
       )
 
-      MonorepoComposer.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
+      composeCanonical(Seq(step), crossBuild = true)(ctx).flatMap { result =>
         val project = MonorepoSpecSupport.projectNamed(result.projects, "core")
 
         for {
@@ -907,7 +904,7 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
           enableCrossBuild = true
         )
 
-        MonorepoComposer.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
+        composeCanonical(Seq(step), crossBuild = true)(ctx).flatMap { result =>
           val project = MonorepoSpecSupport.projectNamed(result.projects, "core")
 
           for {
@@ -963,7 +960,7 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
         enableCrossBuild = true
       )
 
-      MonorepoComposer.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
+      composeCanonical(Seq(step), crossBuild = true)(ctx).flatMap { result =>
         val project = MonorepoSpecSupport.projectNamed(result.projects, "core")
 
         MonorepoSpecSupport
@@ -1000,7 +997,7 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
         enableCrossBuild = true
       )
 
-      MonorepoComposer.compose(Seq(step), crossBuild = true)(ctx).flatMap { result =>
+      composeCanonical(Seq(step), crossBuild = true)(ctx).flatMap { result =>
         scalaVersionOf(result.state).map { finalVersion =>
           assert(result.failed)
           assertEquals(finalVersion, TestSupport.CurrentScalaVersion)
@@ -1031,8 +1028,7 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
         )
       )
     }.use { ctx =>
-      MonorepoComposer
-        .compose(Seq(MonorepoPublishSteps.runTests), crossBuild = true)(ctx)
+      composeCanonical(Seq(MonorepoVerificationSteps.runTests), crossBuild = true)(ctx)
         .flatMap { result =>
           scalaVersionOf(result.state).map { finalVersion =>
             val core      = MonorepoSpecSupport.projectNamed(result.projects, "core")
@@ -1086,22 +1082,21 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
         execute = (c, _) => IO.pure(c)
       )
 
-      MonorepoComposer.compose(Seq(crossStep, plainStep), crossBuild = true)(ctx).flatMap {
-        result =>
-          val project = MonorepoSpecSupport.projectNamed(result.projects, "core")
+      composeCanonical(Seq(crossStep, plainStep), crossBuild = true)(ctx).flatMap { result =>
+        val project = MonorepoSpecSupport.projectNamed(result.projects, "core")
 
-          for {
-            crossLines <-
-              MonorepoSpecSupport.readNonEmptyLines(new File(project.baseDir, "cross-validate.txt"))
-            plainLines <-
-              MonorepoSpecSupport.readNonEmptyLines(new File(project.baseDir, "plain-validate.txt"))
-          } yield {
-            assertEquals(
-              crossLines,
-              List(TestSupport.CurrentScalaVersion, TestSupport.alternateScalaVersion)
-            )
-            assertEquals(plainLines, List(TestSupport.CurrentScalaVersion))
-          }
+        for {
+          crossLines <-
+            MonorepoSpecSupport.readNonEmptyLines(new File(project.baseDir, "cross-validate.txt"))
+          plainLines <-
+            MonorepoSpecSupport.readNonEmptyLines(new File(project.baseDir, "plain-validate.txt"))
+        } yield {
+          assertEquals(
+            crossLines,
+            List(TestSupport.CurrentScalaVersion, TestSupport.alternateScalaVersion)
+          )
+          assertEquals(plainLines, List(TestSupport.CurrentScalaVersion))
+        }
       }
     }
   }
@@ -1139,7 +1134,7 @@ class MonorepoStepIOCrossBuildSpec extends CatsEffectSuite with MonorepoStepIOSp
         enableCrossBuild = true
       )
 
-      MonorepoComposer.compose(Seq(step1, step2), crossBuild = true)(ctx).flatMap { result =>
+      composeCanonical(Seq(step1, step2), crossBuild = true)(ctx).flatMap { result =>
         val project = MonorepoSpecSupport.projectNamed(result.projects, "core")
 
         for {

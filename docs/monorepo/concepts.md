@@ -36,12 +36,9 @@
 
 Author implication: if a custom hook needs strict validate -> execute ordering relative to later checks, place it in the setup segment or fold the dependent check and action into the same hook.
 
-Custom workflows that omit `detect-or-select-projects` retain the legacy
-validate-then-execute-per-step fallback. In that mode, publish validation
-refreshes an eligible probe after an executed `beforePublish` hook so
-hook-installed `publishTo` and `publish / skip` settings are observed. The
-original skip decision remains an upper bound, and a skipped probe is never
-re-enabled or re-evaluated.
+The compiled process must contain exactly one selection boundary. The built-in
+`detect-or-select-projects` step provides it; an invalid internal workflow is
+rejected before validation or execution begins.
 
 ### Per-project failure isolation
 

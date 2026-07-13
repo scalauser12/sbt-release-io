@@ -5,7 +5,6 @@ import io.release.TestAssertions.assertFailure
 import io.release.monorepo.MonorepoContext
 import io.release.monorepo.MonorepoSpecSupport
 import io.release.monorepo.ProjectReleaseInfo
-import io.release.monorepo.internal.MonorepoComposer
 import io.release.monorepo.internal.steps.*
 import io.release.runtime.engine.ProcessStep
 import munit.CatsEffectSuite
@@ -32,7 +31,7 @@ class MonorepoPublishFailureHandlingSpec
     ).use { fixture =>
       val ctx = fixture.context(Seq("core", "api"))
 
-      MonorepoComposer.compose(Seq(MonorepoPublishSteps.runTests))(ctx).map { result =>
+      composeCanonical(Seq(MonorepoVerificationSteps.runTests))(ctx).map { result =>
         val coreRun   = new File(
           MonorepoSpecSupport.projectNamed(result.projects, "core").baseDir,
           "test-ran.txt"
@@ -66,7 +65,7 @@ class MonorepoPublishFailureHandlingSpec
     }.use { fixture =>
       val ctx = fixture.context(Seq("core"))
 
-      MonorepoComposer.compose(Seq(MonorepoPublishSteps.runClean))(ctx).map { result =>
+      composeCanonical(Seq(MonorepoVerificationSteps.runClean))(ctx).map { result =>
         val coreRun   = new File(
           MonorepoSpecSupport.projectNamed(result.projects, "core").baseDir,
           "clean-ran.txt"
@@ -102,8 +101,7 @@ class MonorepoPublishFailureHandlingSpec
     }.use { fixture =>
       val ctx = fixture.context(Seq("core"))
 
-      MonorepoComposer
-        .compose(Seq(MonorepoPublishSteps.publishArtifacts))(ctx)
+      composeCanonical(Seq(MonorepoPublishSteps.publishArtifacts))(ctx)
         .map { result =>
           val publishMarker = new File(fixture.projectInfo("core").baseDir, "publish-ran.txt")
           assert(!result.failed)
@@ -130,8 +128,7 @@ class MonorepoPublishFailureHandlingSpec
     }.use { fixture =>
       val ctx = fixture.context(Seq("core"))
 
-      MonorepoComposer
-        .compose(Seq(MonorepoPublishSteps.publishArtifacts))(ctx)
+      composeCanonical(Seq(MonorepoPublishSteps.publishArtifacts))(ctx)
         .map { result =>
           val marker    = new File(
             MonorepoSpecSupport.projectNamed(result.projects, "core").baseDir,
@@ -168,7 +165,7 @@ class MonorepoPublishFailureHandlingSpec
       val ctx = fixture.context(Seq("core"))
 
       assertFailure[IllegalStateException, MonorepoContext](
-        MonorepoComposer.compose(Seq(MonorepoPublishSteps.publishArtifacts))(ctx)
+        composeCanonical(Seq(MonorepoPublishSteps.publishArtifacts))(ctx)
       ) { err =>
         val marker = new File(fixture.projectInfo("core").baseDir, "publish-target-ran.txt")
 
@@ -189,7 +186,7 @@ class MonorepoPublishFailureHandlingSpec
           (_, project) => IO.raiseError(new RuntimeException(s"${project.name} action blew up"))
       )
 
-      MonorepoComposer.compose(Seq(throwingStep))(ctx).map { result =>
+      composeCanonical(Seq(throwingStep))(ctx).map { result =>
         assert(result.failed)
         val aggregate = requireProjectFailures(result.failureCause)
         assertEquals(aggregate.failures.map(_.projectName), Seq("core", "api"))

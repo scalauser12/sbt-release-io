@@ -10,6 +10,7 @@ import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.workflow.StepHelpers
 import io.release.runtime.workflow.StepHelpers.errorMessage
+import sbt.TaskKey
 
 import scala.util.control.NonFatal
 
@@ -29,11 +30,8 @@ import scala.util.control.NonFatal
  */
 private[monorepo] object MonorepoStepHelpers {
 
-  /** Substring present in any `IllegalStateException` emitted after an sbt task triggered
-    * `FailureCommand`. Sourced from [[StepHelpers.FailureCommandMarker]] so both modules
-    * stay in sync if the wording emitted by `runTaskChecked` changes.
-    */
-  private[monorepo] val FailureCommandMarker: String = StepHelpers.FailureCommandMarker
+  val MissingVcsMessage: String =
+    "VCS not initialized. Ensure initializeVcs runs before this step."
 
   // ── Per-project execution ─────────────────────────────────────────────
 
@@ -114,7 +112,7 @@ private[monorepo] object MonorepoStepHelpers {
   ): IO[MonorepoContext] =
     if (SbtRuntime.hasFailureCommand(ctx.state)) {
       val failure = new IllegalStateException(
-        s"${project.name}: sbt task $FailureCommandMarker"
+        s"${project.name}: sbt task ${StepHelpers.FailureCommandMarker}"
       )
       for {
         stripped <- ExecutionEngine.stripFailureCommand(ctx)
@@ -126,6 +124,16 @@ private[monorepo] object MonorepoStepHelpers {
                     )
       } yield armed
     } else IO.pure(ctx)
+
+  /** Run a project-scoped task while retaining the sbt state it returns. */
+  def runProjectTask[A](
+      ctx: MonorepoContext,
+      key: TaskKey[A]
+  ): IO[MonorepoContext] =
+    IO.blocking {
+      val (newState, _) = SbtRuntime.runTask(ctx.state, key)
+      ctx.withState(newState)
+    }
 
   // ── Logging ───────────────────────────────────────────────────────────
 

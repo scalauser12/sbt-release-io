@@ -76,6 +76,35 @@ class ChangeDetectionCacheSpec extends CatsEffectSuite with ChangeDetectionSpecS
     }
   }
 
+  test("detectChangedProjects - cache a failed diff until the shared tag's final consumer") {
+    repoResource.use { repo =>
+      for {
+        _         <- initializeRepo(
+                       repo,
+                       projectNames = Seq("core", "util"),
+                       tagNames = Seq("shared")
+                     )
+        vcs       <- detectVcs(repo)
+        diffCalls <- Ref.of[IO, Int](0)
+        projects   = Seq("core", "util").map(nestedProject(repo, _))
+        changed   <- detectChanged(
+                       vcs,
+                       projects,
+                       testEnv(repo).state,
+                       tagNameFn = (_, version) => s"shared-v$version",
+                       diffLoader = (_, _) =>
+                         diffCalls
+                           .update(_ + 1)
+                           .as(Left("diff failed"): Either[String, Seq[String]])
+                     )
+        calls     <- diffCalls.get
+      } yield {
+        assertEquals(changed.map(_.name), Seq("core", "util"))
+        assertEquals(calls, 1)
+      }
+    }
+  }
+
   private def initializeRepo(
       repo: File,
       projectNames: Seq[String],

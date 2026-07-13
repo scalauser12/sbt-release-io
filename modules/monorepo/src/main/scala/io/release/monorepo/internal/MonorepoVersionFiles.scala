@@ -18,9 +18,6 @@ private[monorepo] object MonorepoVersionFiles {
   def resolve(runtime: MonorepoRuntime, ref: ProjectRef): File =
     runtime.extracted.get(releaseIOMonorepoVersioningFile)(ref, runtime.state)
 
-  def resolve(state: State, ref: ProjectRef): File =
-    resolve(MonorepoRuntime.fromState(state), ref)
-
   // ── Input resolution ─────────────────────────────────────────────────
 
   def resolveInputs(runtime: MonorepoRuntime, ref: ProjectRef): VersionInputs =
@@ -64,4 +61,16 @@ private[monorepo] object MonorepoVersionFiles {
         releaseIOMonorepoVersioningFileContents.key
       )
     )
+
+  /** Persist settings without dropping hook-installed late-bound version-file
+    * definitions. An empty settings sequence still performs the lift, while
+    * retaining the lifted state's no-op identity instead of rebuilding it.
+    */
+  def appendSessionSettingsPreservingVersioning(
+      state: State,
+      settings: Seq[Setting[?]]
+  ): State = {
+    val lifted = liftLateBoundVersioningSettings(state)
+    if (settings.isEmpty) lifted else SbtRuntime.appendSessionSettings(lifted, settings)
+  }
 }

@@ -3,7 +3,7 @@ package io.release.monorepo.internal
 import cats.effect.IO
 import io.release.monorepo.*
 import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
-import io.release.monorepo.internal.steps.MonorepoPublishSteps
+import io.release.monorepo.internal.steps.MonorepoPublishWorkflow
 import io.release.monorepo.internal.steps.MonorepoReleaseSteps
 import io.release.runtime.HookPhases
 import io.release.runtime.engine.LifecycleCompiler
@@ -87,13 +87,13 @@ private[release] object MonorepoLifecycle {
   private val publishGate: (MonorepoContext, ProjectReleaseInfo) => IO[
     Boolean
   ] =
-    MonorepoPublishSteps.shouldRunPublishHooks
+    MonorepoPublishWorkflow.shouldRunPublishHooks
 
   /** Execute-time AND condition for `before-publish` hooks: combined with the
     * frozen validate-time gate decision so the hook fires only when the
     * publish task will actually run for this project/iteration at execute
     * time. Re-evaluates `ctx.skipPublish` (folded in via
-    * [[MonorepoPublishSteps.shouldRunPublishHooksAtExecute]]'s `effectiveSkip`
+    * [[MonorepoPublishWorkflow.shouldRunPublishHooksAtExecute]]'s `effectiveSkip`
     * check) and per-project `publish / skip` against `ctx.state` so a hook
     * earlier in the release (e.g., `afterReleaseCommit`, `afterTag`) that
     * flipped `ctx.skipPublish` or installed `publish / skip := true` via
@@ -103,7 +103,7 @@ private[release] object MonorepoLifecycle {
     * `releaseIOMonorepo check`.
     */
   private val beforePublishNarrow: (MonorepoContext, ProjectReleaseInfo) => IO[Boolean] =
-    MonorepoPublishSteps.shouldRunPublishHooksAtExecute
+    MonorepoPublishWorkflow.shouldRunPublishHooksAtExecute
 
   /** Execute-time AND condition for `after-publish` hooks: combined with the
     * frozen validate-time gate decision so the hook fires only when the
@@ -112,7 +112,7 @@ private[release] object MonorepoLifecycle {
     * validate-before-execute contract for `releaseIOMonorepo check`.
     */
   private val afterPublishNarrow: (MonorepoContext, ProjectReleaseInfo) => IO[Boolean] =
-    (ctx, project) => IO.blocking(MonorepoPublishSteps.didPublishForAfterHook(ctx, project))
+    (ctx, project) => IO.blocking(MonorepoPublishWorkflow.didPublishForAfterHook(ctx, project))
 
   /** Execute-time AND condition for the global `before-push` hook: fires only
     * when the push decision is not already a deterministic decline. Mirrors the
@@ -211,8 +211,8 @@ private[release] object MonorepoLifecycle {
       _.beforePublishHooks,
       gate = publishGate,
       crossBuild = MonorepoReleaseSteps.publishArtifacts.enableCrossBuild,
-      freezeGateKey = Some(MonorepoPublishSteps.publishGateKey),
-      freezeGateValidation = Some(MonorepoPublishSteps.beforePublishGateValidation),
+      freezeGateKey = Some(MonorepoPublishWorkflow.publishGateKey),
+      freezeGateValidation = Some(MonorepoPublishWorkflow.beforePublishGateValidation),
       enabled = _.enablePublish,
       narrowExecute = Some(beforePublishNarrow),
       narrowOnMissingFrozenGate = true
@@ -223,8 +223,8 @@ private[release] object MonorepoLifecycle {
       _.afterPublishHooks,
       gate = publishGate,
       crossBuild = MonorepoReleaseSteps.publishArtifacts.enableCrossBuild,
-      freezeGateKey = Some(MonorepoPublishSteps.afterPublishGateKey),
-      freezeGateValidation = Some(MonorepoPublishSteps.afterPublishGateValidation),
+      freezeGateKey = Some(MonorepoPublishWorkflow.afterPublishGateKey),
+      freezeGateValidation = Some(MonorepoPublishWorkflow.afterPublishGateValidation),
       enabled = _.enablePublish,
       narrowExecute = Some(afterPublishNarrow),
       narrowOnMissingFrozenGate = true

@@ -10,7 +10,7 @@ import io.release.monorepo.MonorepoContext
 import io.release.monorepo.MonorepoReleasePlugin
 import io.release.monorepo.MonorepoSpecSupport
 import io.release.monorepo.PublishPreparationTestVcs
-import io.release.monorepo.internal.MonorepoComposer
+import io.release.monorepo.internal.{MonorepoComposer, MonorepoRuntime, MonorepoVersionFiles}
 import io.release.monorepo.internal.steps.*
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.HookPhases
@@ -237,7 +237,7 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
       val project = fixture.projectInfo("core")
 
       MonorepoPublishSteps.publishArtifacts.execute(ctx, project).map { result =>
-        val expectedKey = MonorepoPublishSteps.publishGateKey(result, project)
+        val expectedKey = MonorepoPublishWorkflow.publishGateKey(result, project)
         assert(
           result.publishExecutedKeys.exists(_.contains(expectedKey)),
           s"Expected publishExecutedKeys to contain $expectedKey, got ${result.publishExecutedKeys}"
@@ -469,7 +469,7 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
         assertEquals(result.publishSkipFrozen, Some(false))
         assert(published)
         assert(skipEvaluated)
-        val executedKey = MonorepoPublishSteps.publishGateKey(result, project)
+        val executedKey = MonorepoPublishWorkflow.publishGateKey(result, project)
         assert(result.publishExecutedKeys.exists(_.contains(executedKey)))
       }
     }
@@ -570,24 +570,24 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
       val project  = ctx.currentProjects.head
       val ref      = project.ref
       val marker   = new File(fixture.dir, "published.txt")
-      val entryKey = MonorepoPublishSteps.publishGateKey(ctx, project)
+      val entryKey = MonorepoPublishWorkflow.publishGateKey(ctx, project)
 
       for {
-        gateValidation <- MonorepoPublishSteps.publishGateValidation(ctx, project)
+        gateValidation <- MonorepoPublishWorkflow.publishGateValidation(ctx, project)
         validationKey   = gateValidation.key
         validated      <- MonorepoPublishSteps.publishArtifacts.validate(
                             gateValidation.context,
                             project
                           )
-        validateGate   <- MonorepoPublishSteps.shouldRunPublishHooks(validated, project)
+        validateGate   <- MonorepoPublishWorkflow.shouldRunPublishHooks(validated, project)
         executeState    = TestSupport.appendSessionSettings(
                             validated.state,
                             Seq(ref / version := "1.0.0")
                           )
         executeCtx      = validated.withState(executeState)
         executeScala    = SbtRuntime.extracted(executeState).get(ref / scalaVersion)
-        executeKey      = MonorepoPublishSteps.publishGateKey(executeCtx, project)
-        executeGate    <- MonorepoPublishSteps.shouldRunPublishHooksAtExecute(executeCtx, project)
+        executeKey      = MonorepoPublishWorkflow.publishGateKey(executeCtx, project)
+        executeGate    <- MonorepoPublishWorkflow.shouldRunPublishHooksAtExecute(executeCtx, project)
         result         <- MonorepoPublishSteps.publishArtifacts.execute(executeCtx, project)
         published      <- IO.blocking(marker.exists())
       } yield {
@@ -595,11 +595,15 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
         assertNotEquals(entryKey, validationKey)
         assertEquals(executeKey, validationKey)
         assertEquals(
-          validated.validatedPublishEligibility(ref, TestSupport.alternateScalaVersion),
+          validated.validatedPublishEligibility(
+            MonorepoContext.PublishIteration(ref, TestSupport.alternateScalaVersion)
+          ),
           Some(true)
         )
         assertEquals(
-          validated.validatedPublishEligibility(ref, TestSupport.CurrentScalaVersion),
+          validated.validatedPublishEligibility(
+            MonorepoContext.PublishIteration(ref, TestSupport.CurrentScalaVersion)
+          ),
           None
         )
         val probe = validated
@@ -607,8 +611,7 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
             MonorepoContext.PublishIteration(ref, TestSupport.CurrentScalaVersion)
           )
           .getOrElse(fail("expected shared publish validation probe"))
-        assert(probe.targetValidated)
-        assertEquals(probe.pendingTargetState, None)
+        assertEquals(probe.targetProgress, MonorepoContext.PublishTargetProgress.Validated)
         assert(validateGate)
         assert(executeGate)
         assert(published)
@@ -647,78 +650,11 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
         )
       )
 
-      MonorepoPublishSteps.publishGateValidation(ctx, project).map { resolved =>
+      MonorepoPublishWorkflow.publishGateValidation(ctx, project).map { resolved =>
         assert(resolved.decision)
         assert(resolved.key.nonEmpty)
         assertEquals(releaseCalls.get(), 1)
         assertEquals(nextCalls.get(), 1)
-      }
-    }
-  }
-
-  test("publish validation snapshot preserves marked refresh probes and clears stale probes") {
-    singleProjectFixtureResource(
-      "monorepo-publish-refresh-probe-snapshot",
-      rootSettings = Seq(
-        MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks := false
-      )
-    ) { projectBase =>
-      Seq(
-        scalaVersion := TestSupport.CurrentScalaVersion,
-        MonorepoStepTestCompat.countedPublishSkipSetting(
-          new File(projectBase.getParentFile, "publish-skip-evaluations.txt"),
-          skipped = false
-        ),
-        publishTo    := Some(Resolver.file("local", projectBase.getParentFile))
-      )
-    }.use { fixture =>
-      val ctx       = fixture.context(Seq("core"))
-      val project   = fixture.projectInfo("core")
-      val rootRef   = fixture.refsById("root")
-      val iteration = MonorepoContext.PublishIteration(
-        project.ref,
-        TestSupport.CurrentScalaVersion
-      )
-      val counter   = new File(fixture.dir, "publish-skip-evaluations.txt")
-
-      for {
-        hookGate      <- MonorepoPublishSteps.beforePublishGateValidation(ctx, project)
-        checksEnabled  =
-          hookGate.context.withState(
-            TestSupport.appendSessionSettings(
-              hookGate.context.state,
-              Seq(
-                rootRef /
-                  MonorepoReleasePlugin.autoImport.releaseIOMonorepoPublishChecks := true
-              )
-            )
-          )
-        marked         = checksEnabled.beginPublishValidationBatch(
-                           refreshExecutedPrelude = true
-                         )
-        prepared      <- MonorepoPublishSteps.preparePublishValidation(marked)
-        directSnapshot = checksEnabled.initializeValidatedPublishEligibilitySnapshot(
-                           preserveRefreshProbes = false
-                         )
-        validated     <- MonorepoPublishSteps.publishArtifacts.validate(prepared, project)
-        evaluations   <- IO.blocking(sbt.IO.read(counter).trim.toInt)
-      } yield {
-        assertEquals(hookGate.decision, true)
-        assert(!hookGate.context.hasValidatedPublishEligibilitySnapshot)
-        assert(marked.hasPendingPublishValidationRefreshInputs)
-        assert(prepared.hasPendingPublishValidationRefreshInputs)
-        assert(prepared.publishValidationProbe(iteration).nonEmpty)
-        assertEquals(directSnapshot.publishValidationProbe(iteration), None)
-        assertEquals(directSnapshot.validatedPublishGateDecision(iteration), None)
-        assert(!validated.hasPendingPublishValidationRefreshInputs)
-        assertEquals(validated.validatedPublishGateDecision(iteration), Some(true))
-        assertEquals(validated.validatedPublishEligibility(iteration), Some(true))
-        val refreshedProbe = validated
-          .publishValidationProbe(iteration)
-          .getOrElse(fail("expected the consumed refresh probe"))
-        assert(refreshedProbe.targetValidated)
-        assertEquals(refreshedProbe.pendingTargetState, None)
-        assertEquals(evaluations, 2)
       }
     }
   }
@@ -750,10 +686,10 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
         .head
 
       for {
-        hookGate          <- MonorepoPublishSteps.beforePublishGateValidation(ctx, project)
+        hookGate          <- MonorepoPublishWorkflow.beforePublishGateValidation(ctx, project)
         firstValidated    <- prepared.validate(hookGate.context)
         firstEvaluations  <- IO.blocking(sbt.IO.read(probe))
-        secondHookGate    <- MonorepoPublishSteps.beforePublishGateValidation(
+        secondHookGate    <- MonorepoPublishWorkflow.beforePublishGateValidation(
                                firstValidated,
                                project
                              )
@@ -771,8 +707,10 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
         val secondProbe = secondValidated
           .publishValidationProbe(iteration)
           .getOrElse(fail("expected fresh second-batch probe"))
-        assert(secondProbe.targetValidated)
-        assertEquals(secondProbe.pendingTargetState, None)
+        assertEquals(
+          secondProbe.targetProgress,
+          MonorepoContext.PublishTargetProgress.Validated
+        )
       }
     }
   }
@@ -800,9 +738,9 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
         .head
 
       for {
-        firstHook       <- MonorepoPublishSteps.beforePublishGateValidation(ctx, project)
+        firstHook       <- MonorepoPublishWorkflow.beforePublishGateValidation(ctx, project)
         firstValidated  <- prepared.validate(firstHook.context)
-        secondHook      <- MonorepoPublishSteps.beforePublishGateValidation(
+        secondHook      <- MonorepoPublishWorkflow.beforePublishGateValidation(
                              firstValidated,
                              project
                            )
@@ -839,9 +777,9 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
         .head
 
       for {
-        firstHook       <- MonorepoPublishSteps.beforePublishGateValidation(initial, project)
+        firstHook       <- MonorepoPublishWorkflow.beforePublishGateValidation(initial, project)
         firstValidated  <- prepared.validate(firstHook.context)
-        secondHook      <- MonorepoPublishSteps.beforePublishGateValidation(
+        secondHook      <- MonorepoPublishWorkflow.beforePublishGateValidation(
                              firstValidated.copy(skipPublish = false),
                              project
                            )
@@ -876,7 +814,7 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
 
       for {
         firstValidated <- prepared.validate(empty)
-        secondHook     <- MonorepoPublishSteps.beforePublishGateValidation(
+        secondHook     <- MonorepoPublishWorkflow.beforePublishGateValidation(
                             firstValidated
                               .withProjects(Seq(project))
                               .copy(skipPublish = false),
@@ -923,10 +861,10 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
         .head
 
       for {
-        firstHook       <- MonorepoPublishSteps.beforePublishGateValidation(initial, project)
+        firstHook       <- MonorepoPublishWorkflow.beforePublishGateValidation(initial, project)
         firstValidated  <- prepared.validate(firstHook.context)
         firstEvaluated  <- IO.blocking(marker.exists())
-        secondHook      <- MonorepoPublishSteps.beforePublishGateValidation(
+        secondHook      <- MonorepoPublishWorkflow.beforePublishGateValidation(
                              firstValidated.copy(skipPublish = false),
                              project
                            )
@@ -1138,10 +1076,10 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
         assert(published)
         assertEquals(liveScala, "9.9.9")
         assertEquals(
-          MonorepoPublishSteps.afterPublishGateKey(result, project),
+          MonorepoPublishWorkflow.afterPublishGateKey(result, project),
           attempt.gateKey
         )
-        assert(MonorepoPublishSteps.didPublishForAfterHook(result, project))
+        assert(MonorepoPublishWorkflow.didPublishForAfterHook(result, project))
         assert(result.publishExecutedKeys.exists(_.contains(actionSource.gateKey)))
       }
     }
@@ -1164,7 +1102,7 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
       val project  = fixture.projectInfo("core")
       val ref      = fixture.refsById("core")
       val marker   = new File(fixture.dir, "published.txt")
-      val entryKey = MonorepoPublishSteps.publishGateKey(ctx, project)
+      val entryKey = MonorepoPublishWorkflow.publishGateKey(ctx, project)
       val withTask = ctx.withState(
         TestSupport.appendSessionSettings(
           ctx.state,
@@ -1186,9 +1124,9 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
       } yield {
         assert(published)
         assertEquals(liveScala, TestSupport.alternateScalaVersion)
-        assertNotEquals(MonorepoPublishSteps.publishGateKey(result, project), entryKey)
-        assertEquals(MonorepoPublishSteps.afterPublishGateKey(result, project), entryKey)
-        assert(MonorepoPublishSteps.didPublishForAfterHook(result, project))
+        assertNotEquals(MonorepoPublishWorkflow.publishGateKey(result, project), entryKey)
+        assertEquals(MonorepoPublishWorkflow.afterPublishGateKey(result, project), entryKey)
+        assert(MonorepoPublishWorkflow.didPublishForAfterHook(result, project))
         assert(result.publishExecutedKeys.exists(_.contains(entryKey)))
       }
     }
@@ -1224,13 +1162,15 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
         validatedScala =
           SbtRuntime.extracted(validated.state).getOpt(ref / scalaVersion).getOrElse("")
         _              = assertEquals(
-                           validated.validatedPublishEligibility(ref, validatedScala),
+                           validated.validatedPublishEligibility(
+                             MonorepoContext.PublishIteration(ref, validatedScala)
+                           ),
                            Some(false)
                          )
         initialProbes <- IO.blocking(sbt.IO.read(probe))
         _              = assertEquals(initialProbes, "1")
-        validateGate  <- MonorepoPublishSteps.shouldRunPublishHooks(validated, project)
-        executeGate   <- MonorepoPublishSteps.shouldRunPublishHooksAtExecute(validated, project)
+        validateGate  <- MonorepoPublishWorkflow.shouldRunPublishHooks(validated, project)
+        executeGate   <- MonorepoPublishWorkflow.shouldRunPublishHooksAtExecute(validated, project)
         _              = assertEquals(validateGate, false)
         _              = assertEquals(executeGate, false)
         result        <- MonorepoPublishSteps.publishArtifacts.execute(validated, project)
@@ -1269,11 +1209,14 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
       val warning   = MonorepoPublishArtifactsSpec.unvalidatedIterationWarning("core")
 
       for {
-        validated     <- MonorepoPublishSteps.publishArtifacts.validate(ctx, project)
+        collecting    <- MonorepoPublishSteps.publishArtifacts.validate(ctx, project)
+        validated      = collecting.finalizePublishValidation
         validatedScala =
           SbtRuntime.extracted(validated.state).getOpt(ref / scalaVersion).getOrElse("")
         _              = assertEquals(
-                           validated.validatedPublishEligibility(ref, validatedScala),
+                           validated.validatedPublishEligibility(
+                             MonorepoContext.PublishIteration(ref, validatedScala)
+                           ),
                            Some(true)
                          )
         executeState   = TestSupport.appendSessionSettings(
@@ -1288,8 +1231,8 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
                            )
                          )
         executeCtx     = validated.withState(executeState)
-        validateGate  <- MonorepoPublishSteps.shouldRunPublishHooks(executeCtx, project)
-        executeGate   <- MonorepoPublishSteps.shouldRunPublishHooksAtExecute(executeCtx, project)
+        validateGate  <- MonorepoPublishWorkflow.shouldRunPublishHooks(executeCtx, project)
+        executeGate   <- MonorepoPublishWorkflow.shouldRunPublishHooksAtExecute(executeCtx, project)
         _              = assertEquals(validateGate, false)
         _              = assertEquals(executeGate, false)
         result        <- MonorepoPublishSteps.publishArtifacts.execute(executeCtx, project)
@@ -1333,9 +1276,10 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
       val apiMarker = new File(fixture.dir, "api-published.txt")
 
       for {
-        validated   <- MonorepoPublishSteps.publishArtifacts.validate(ctx, core)
+        collecting  <- MonorepoPublishSteps.publishArtifacts.validate(ctx, core)
+        validated    = collecting.finalizePublishValidation
         driftedCtx   = validated.withProjects(Seq(api))
-        executeGate <- MonorepoPublishSteps.shouldRunPublishHooksAtExecute(driftedCtx, api)
+        executeGate <- MonorepoPublishWorkflow.shouldRunPublishHooksAtExecute(driftedCtx, api)
         _            = assertEquals(executeGate, false)
         result      <- MonorepoPublishSteps.publishArtifacts.execute(driftedCtx, api)
         published   <- IO.blocking(apiMarker.exists())
@@ -1373,7 +1317,9 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
         validatedScala =
           SbtRuntime.extracted(validated.state).getOpt(ref / scalaVersion).getOrElse("")
         _              = assertEquals(
-                           validated.validatedPublishEligibility(ref, validatedScala),
+                           validated.validatedPublishEligibility(
+                             MonorepoContext.PublishIteration(ref, validatedScala)
+                           ),
                            Some(true)
                          )
         executeState   = TestSupport.appendSessionSettings(
@@ -1421,7 +1367,7 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
                          )
                        )
         executeCtx   = validated.withState(executeState)
-        executeKey   = MonorepoPublishSteps.publishGateKey(executeCtx, project)
+        executeKey   = MonorepoPublishWorkflow.publishGateKey(executeCtx, project)
         result      <- MonorepoPublishSteps.publishArtifacts.execute(executeCtx, project)
         published   <- IO.blocking(marker.exists())
         _            = assert(published)
@@ -1452,7 +1398,7 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
         )
       )
       val executeCtx   = ctx.withState(executeState)
-      val executeKey   = MonorepoPublishSteps.publishGateKey(executeCtx, project)
+      val executeKey   = MonorepoPublishWorkflow.publishGateKey(executeCtx, project)
 
       for {
         result    <- MonorepoPublishSteps.publishArtifacts.execute(executeCtx, project)
@@ -1676,6 +1622,50 @@ class MonorepoPublishArtifactsSpec extends CatsEffectSuite with MonorepoPublishS
           val lines = sbt.IO.readLines(new File(fixture.dir, "publish-metadata.txt"))
           assertEquals(lines, List("version=1.0.0", "hash=abc123", "tag=core/v1.0.0"))
         }
+      }
+    }
+  }
+
+  test(
+    "publishArtifacts.execute - preserve late-bound version settings while installing fallback hash"
+  ) {
+    singleProjectFixtureResource("monorepo-publish-fallback-hash-late-bound") { _ =>
+      Seq(
+        publish / skip                                       := false,
+        ReleaseManifestMetadata.releaseIOInternalReleaseHash := None,
+        ReleaseSharedKeys.releaseIOPublishAction             := { /* no-op publish */ }
+      )
+    }.use { fixture =>
+      val lateBoundFile  = new File(fixture.dir, "late-bound-version.properties")
+      val transientState = SbtRuntime.appendWithSession(
+        fixture.state,
+        Seq(
+          MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningFile := {
+            (_: ProjectRef, _: State) => lateBoundFile
+          }
+        )
+      )
+      val ctx            = fixture
+        .context(
+          Seq("core"),
+          versionsById = Map("core" -> ("1.0.0" -> "1.1.0-SNAPSHOT")),
+          vcs = Some(new PublishPreparationTestVcs(fixture.dir))
+        )
+        .withState(transientState)
+      val project        = ctx.currentProjects.head
+
+      MonorepoPublishSteps.publishArtifacts.execute(ctx, project).map { result =>
+        assertEquals(
+          MonorepoVersionFiles.resolve(MonorepoRuntime.fromState(result.state), project.ref),
+          lateBoundFile
+        )
+        assertEquals(
+          SbtRuntime
+            .extracted(result.state)
+            .getOpt(project.ref / ReleaseManifestMetadata.releaseIOInternalReleaseHash)
+            .flatten,
+          Some("publish-test-hash")
+        )
       }
     }
   }

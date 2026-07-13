@@ -31,8 +31,7 @@ import io.release.runtime.workflow.StepHelpers
   *
   *   - '''`runSequentialValidateThenExecute`''' — validate and execute each step before
   *     moving to the next. Used by monorepo when later steps depend on earlier execution
-  *     results (e.g. the setup segment — VCS init, working-dir check, project selection —
-  *     and as the full-sequence fallback when there is no selection boundary).
+  *     results in the setup segment (VCS init, working-dir check, and project selection).
   *
   * Both modes interleave sbt `FailureCommand` detection between actions and short-circuit
   * on the first failure.

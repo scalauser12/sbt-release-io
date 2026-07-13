@@ -9,17 +9,14 @@ import io.release.runtime.engine.StepOrdering
 private[monorepo] final case class MonorepoProcessPlan(
     stepNames: Seq[String],
     setupSteps: Seq[AnyStep],
-    mainSteps: Seq[AnyStep],
-    hasSelectionBoundary: Boolean
+    mainSteps: Seq[AnyStep]
 ) {
 
   def preSelectionSetupSteps: Seq[AnyStep] =
-    if (!hasSelectionBoundary) Seq.empty
-    else setupSteps.takeWhile(step => !MonorepoProcessPlan.isAfterSelectionHookStep(step))
+    setupSteps.takeWhile(step => !MonorepoProcessPlan.isAfterSelectionHookStep(step))
 
   def postSelectionSetupSteps: Seq[AnyStep] =
-    if (!hasSelectionBoundary) Seq.empty
-    else setupSteps.drop(preSelectionSetupSteps.length)
+    setupSteps.drop(preSelectionSetupSteps.length)
 
   def pushConfigured: Boolean =
     allSteps.exists(_.hasRole(BuiltInStepRole.PushChanges))
@@ -67,7 +64,7 @@ private[monorepo] final case class MonorepoProcessPlan(
     )
 
   private def allSteps: Seq[AnyStep] =
-    if (hasSelectionBoundary) setupSteps ++ mainSteps else mainSteps
+    setupSteps ++ mainSteps
 
   private lazy val versionIndex: Int =
     mainSteps.indexWhere(_.hasRole(BuiltInStepRole.ResolveVersions))
@@ -83,26 +80,41 @@ private[monorepo] object MonorepoProcessPlan {
   private def isAfterSelectionHookStep(step: AnyStep): Boolean =
     step.name.startsWith(AfterSelectionHookStepPrefix)
 
-  def analyze(steps: Seq[AnyStep]): MonorepoProcessPlan = {
-    val boundaryIndex           =
-      steps.indexWhere(_.hasRole(BuiltInStepRole.SelectionBoundary))
-    val setupStepCount          =
-      if (boundaryIndex < 0) 0
-      else
-        boundaryIndex + 1 +
-          steps
-            .drop(boundaryIndex + 1)
-            .takeWhile(isAfterSelectionHookStep)
-            .length
-    val (setupSteps, mainSteps) =
-      if (boundaryIndex < 0) (Seq.empty, steps)
-      else steps.splitAt(setupStepCount)
+  def analyze(steps: Seq[AnyStep]): Either[IllegalStateException, MonorepoProcessPlan] = {
+    val boundaryIndexes = steps.zipWithIndex.collect {
+      case (step, index) if step.hasRole(BuiltInStepRole.SelectionBoundary) => index
+    }
 
-    MonorepoProcessPlan(
-      stepNames = steps.map(_.name),
-      setupSteps = setupSteps,
-      mainSteps = mainSteps,
-      hasSelectionBoundary = boundaryIndex >= 0
-    )
+    boundaryIndexes match {
+      case Seq(boundaryIndex) =>
+        val setupStepCount          =
+          boundaryIndex + 1 +
+            steps
+              .drop(boundaryIndex + 1)
+              .takeWhile(isAfterSelectionHookStep)
+              .length
+        val (setupSteps, mainSteps) = steps.splitAt(setupStepCount)
+
+        Right(
+          MonorepoProcessPlan(
+            stepNames = steps.map(_.name),
+            setupSteps = setupSteps,
+            mainSteps = mainSteps
+          )
+        )
+      case indexes            =>
+        val boundaryNames = indexes.map(index => steps(index).name)
+        val details       =
+          if (boundaryNames.isEmpty) "none"
+          else boundaryNames.mkString("[", ", ", "]")
+
+        Left(
+          new IllegalStateException(
+            "Monorepo process must contain exactly one selection-boundary step " +
+              s"(normally '${MonorepoReleaseSteps.detectOrSelectProjects.name}'); " +
+              s"found ${indexes.size}: $details."
+          )
+        )
+    }
   }
 }

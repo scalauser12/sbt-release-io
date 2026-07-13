@@ -17,6 +17,11 @@ import io.release.vcs.Vcs
   */
 private[release] object VersionCommitSupport {
 
+  final case class ConditionalCommitResult(
+      hash: String,
+      committed: Boolean
+  )
+
   /** Atomic stage-and-commit. Wrapped in `IO.uncancelable` so a cancelled fiber cannot
     * strand staged-but-uncommitted changes — and so a cancel arriving during `add`/`commit`
     * cannot skip the caller's `postCommitVerify` invariant. Returns the post-commit hash.
@@ -43,6 +48,37 @@ private[release] object VersionCommitSupport {
         hash <- vcs.currentHash
         _    <- postCommitVerify
       } yield hash
+    }
+
+  /** Atomically stage configured paths, inspect the resulting index, commit
+    * only when it contains changes, resolve the resulting (or existing) HEAD,
+    * and verify the caller's post-condition.
+    *
+    * The whole sequence is uncancelable so cancellation cannot strand staged
+    * files or skip the caller's post-condition. On a no-op, `hash` is the
+    * unchanged current HEAD and `committed` is false.
+    */
+  def stageAndCommitIfChangedAtomic(
+      vcs: Vcs,
+      paths: Seq[String],
+      message: String,
+      sign: Boolean,
+      signOff: Boolean,
+      postCommitVerify: IO[Unit] = IO.unit
+  ): IO[ConditionalCommitResult] =
+    IO.uncancelable { _ =>
+      for {
+        _      <- if (paths.isEmpty) IO.unit else vcs.add(paths*)
+        staged <- vcs.stagedFiles
+        result <-
+          if (staged.nonEmpty)
+            for {
+              _    <- vcs.commit(message, sign, signOff)
+              hash <- vcs.currentHash
+            } yield ConditionalCommitResult(hash, committed = true)
+          else vcs.currentHash.map(hash => ConditionalCommitResult(hash, committed = false))
+        _      <- postCommitVerify
+      } yield result
     }
 
   /** Tracked files that are dirty (modified or staged) but are not in `expected`. Callers

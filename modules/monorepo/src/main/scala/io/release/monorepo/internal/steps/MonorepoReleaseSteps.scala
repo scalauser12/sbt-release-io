@@ -30,13 +30,13 @@ private[monorepo] object MonorepoReleaseSteps {
     MonorepoVersionSteps.commitNextVersions
 
   val checkSnapshotDependencies: ProjectStep =
-    MonorepoPublishSteps.checkSnapshotDependencies
+    MonorepoVerificationSteps.checkSnapshotDependencies
   val publishArtifacts: ProjectStep          =
     MonorepoPublishSteps.publishArtifacts
   val runTests: ProjectStep                  =
-    MonorepoPublishSteps.runTests
+    MonorepoVerificationSteps.runTests
   val runClean: ProjectStep                  =
-    MonorepoPublishSteps.runClean
+    MonorepoVerificationSteps.runClean
 
   val resolveReleaseOrder: GlobalStep = ProcessStep.Single(
     name = "resolve-release-order",
@@ -67,15 +67,15 @@ private[monorepo] object MonorepoReleaseSteps {
 
   /** Per-project tagging step aligned with the `tag-releases` lifecycle phase. */
   val tagReleasesPerProject: ProjectStep =
-    MonorepoVcsSteps.tagReleasesPerProject
+    MonorepoTagWorkflow.tagReleasesPerProject
 
   /** Early batch tag-conflict probe aligned with the `tag-preflight`
     * lifecycle phase. Internally preserves per-project failure isolation.
     */
   val tagPreflight: GlobalStep =
-    MonorepoVcsSteps.tagPreflight
+    MonorepoTagWorkflow.tagPreflight
 
   /** Post-`beforeTag` batch-name guard that runs before the first tag side effect. */
   val planTagNames: GlobalStep =
-    MonorepoVcsSteps.planTagNames
+    MonorepoTagWorkflow.planTagNames
 }

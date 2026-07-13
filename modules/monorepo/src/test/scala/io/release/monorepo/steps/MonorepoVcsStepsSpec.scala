@@ -13,6 +13,8 @@ import io.release.monorepo.MonorepoReleasePlugin
 import io.release.monorepo.MonorepoSpecSupport
 import io.release.monorepo.ProjectReleaseInfo
 import io.release.monorepo.internal.MonorepoDefaultSettings
+import io.release.monorepo.internal.MonorepoRuntime
+import io.release.monorepo.internal.MonorepoTagPlan
 import io.release.monorepo.internal.MonorepoVersionFiles
 import io.release.monorepo.internal.SelectionMode
 import io.release.monorepo.internal.steps.*
@@ -62,7 +64,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
   test("tagReleasesPerProject.execute - create the tag and keep the resulting context usable") {
     perProjectTagContextResource.use { case (repo, project, ctx) =>
       for {
-        result <- MonorepoVcsSteps.tagReleasesPerProject.execute(ctx, project)
+        result <- MonorepoTagWorkflow.tagReleasesPerProject.execute(ctx, project)
         _      <- MonorepoVcsSteps.checkCleanWorkingDir.validate(result).void
         tags   <- IO.blocking(TestSupport.runGit(repo, "tag", "--list", "core-v1.0.0"))
       } yield {
@@ -99,7 +101,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
                                useDefaults = false
                              )
         result            <- TestSupport.withInput("k\n") {
-                               MonorepoVcsSteps.tagReleasesPerProject.execute(ctx, project)
+                               MonorepoTagWorkflow.tagReleasesPerProject.execute(ctx, project)
                              }
         tagRev            <- IO.blocking(
                                TestSupport.runGit(repo, "rev-list", "-n", "1", "core-v1.0.0").trim
@@ -117,8 +119,8 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
   test("tagReleasesPerProject.execute - expose tag metadata only for the tagged project") {
     twoProjectTagContextResource.use { case (_, coreProject, apiProject, ctx) =>
       for {
-        afterCore <- MonorepoVcsSteps.tagReleasesPerProject.execute(ctx, coreProject)
-        afterApi  <- MonorepoVcsSteps.tagReleasesPerProject.execute(afterCore, apiProject)
+        afterCore <- MonorepoTagWorkflow.tagReleasesPerProject.execute(ctx, coreProject)
+        afterApi  <- MonorepoTagWorkflow.tagReleasesPerProject.execute(afterCore, apiProject)
       } yield {
         assertEquals(
           TestSupport.manifestAttributes(afterCore.state, coreProject.ref),
@@ -152,8 +154,8 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
       val seededCtx   = ctx.withState(seededState)
 
       for {
-        afterCore <- MonorepoVcsSteps.tagReleasesPerProject.execute(seededCtx, coreProject)
-        afterApi  <- MonorepoVcsSteps.tagReleasesPerProject.execute(afterCore, apiProject)
+        afterCore <- MonorepoTagWorkflow.tagReleasesPerProject.execute(seededCtx, coreProject)
+        afterApi  <- MonorepoTagWorkflow.tagReleasesPerProject.execute(afterCore, apiProject)
       } yield {
         assertEquals(
           TestSupport.manifestAttributes(afterCore.state, coreProject.ref),
@@ -201,10 +203,10 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
 
       for {
         _        <- IO.blocking(sbt.IO.write(versionProperties, "version=1.0.0\n"))
-        afterTag <- MonorepoVcsSteps.tagReleasesPerProject.execute(mutatedCtx, mutatedProject)
+        afterTag <- MonorepoTagWorkflow.tagReleasesPerProject.execute(mutatedCtx, mutatedProject)
       } yield {
         assertEquals(
-          MonorepoVersionFiles.resolve(afterTag.state, project.ref),
+          MonorepoVersionFiles.resolve(MonorepoRuntime.fromState(afterTag.state), project.ref),
           versionProperties
         )
         assertEquals(
@@ -221,7 +223,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
     perProjectTagContextResource.use { case (repo, project, ctx) =>
       IO.blocking(TestSupport.runGit(repo, "tag", "core-v1.0.0")) *>
         TestAssertions.assertFailure[IllegalStateException, MonorepoContext](
-          MonorepoVcsSteps.tagReleasesPerProject.execute(ctx, project)
+          MonorepoTagWorkflow.tagReleasesPerProject.execute(ctx, project)
         ) { err =>
           assert(err.getMessage.contains("Tag [core-v1.0.0] already exists"))
           assert(err.getMessage.contains("non-interactive mode"))
@@ -240,7 +242,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
                      TestSupport.commitAll(repo, "Second commit")
                    }
         result  <- TestSupport.withInput("o\n") {
-                     MonorepoVcsSteps.tagReleasesPerProject.execute(ctx, project)
+                     MonorepoTagWorkflow.tagReleasesPerProject.execute(ctx, project)
                    }
         tagRev  <- IO.blocking(TestSupport.runGit(repo, "rev-list", "-n", "1", "core-v1.0.0").trim)
         headRev <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
@@ -272,7 +274,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
         headRev        <- IO.blocking(TestSupport.runGit(repo, "rev-parse", "HEAD").trim)
         _              <- TestAssertions.assertFailure[IllegalStateException, MonorepoContext](
                             TestSupport.withInput("k\n") {
-                              MonorepoVcsSteps.tagReleasesPerProject.execute(ctx, project)
+                              MonorepoTagWorkflow.tagReleasesPerProject.execute(ctx, project)
                             }
                           ) { err =>
                             assert(err.getMessage.contains("Tag [core-v1.0.0] already exists"))
@@ -311,7 +313,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
                             TestSupport.commitAll(repo, "Second commit")
                           }
         result         <- TestSupport.withInput("core-v1.0.1\n") {
-                            MonorepoVcsSteps.tagReleasesPerProject.execute(ctx, project)
+                            MonorepoTagWorkflow.tagReleasesPerProject.execute(ctx, project)
                           }
         oldTags        <- IO.blocking(TestSupport.runGit(repo, "tag", "--list", "core-v1.0.0"))
         newTags        <- IO.blocking(TestSupport.runGit(repo, "tag", "--list", "core-v1.0.1"))
@@ -344,7 +346,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
       IO.blocking(TestSupport.runGit(repo, "tag", "core-v1.0.0")) *>
         TestAssertions.assertFailure[IllegalStateException, MonorepoContext](
           TestSupport.withInput("a\n") {
-            MonorepoVcsSteps.tagReleasesPerProject.execute(ctx, project)
+            MonorepoTagWorkflow.tagReleasesPerProject.execute(ctx, project)
           }
         ) { err =>
           assertEquals(
@@ -357,11 +359,11 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
 
   test("preflightTags - report available status for a clean per-project tag path") {
     perProjectTagContextResource.use { case (_, _, ctx) =>
-      MonorepoVcsSteps.preflightTags(ctx, interactive = false).map { outcomes =>
+      MonorepoTagWorkflow.preflightTags(ctx, interactive = false).map { outcomes =>
         assertEquals(
           outcomes,
           Seq(
-            MonorepoVcsSteps.PreflightTagOutcome(
+            MonorepoTagWorkflow.PreflightTagOutcome(
               "core",
               "core-v1.0.0",
               "available",
@@ -378,7 +380,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
       for {
         calls    <- Ref.of[IO, Int](0)
         outcomes <-
-          MonorepoVcsSteps.preflightTags(
+          MonorepoTagWorkflow.preflightTags(
             ctx,
             interactive = false,
             vcs =>
@@ -409,7 +411,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
         )
       )
 
-      MonorepoVcsSteps.tagPreflight.execute(baseCtx.withState(countedState)).map { result =>
+      MonorepoTagWorkflow.tagPreflight.execute(baseCtx.withState(countedState)).map { result =>
         assert(!result.failed)
         assertEquals(renderCalls.get(), 2)
       }
@@ -429,8 +431,8 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
       val duplicateCtx   = baseCtx.withState(duplicateState)
 
       TestAssertions
-        .assertFailure[IllegalStateException, Seq[MonorepoVcsSteps.PreflightTagOutcome]](
-          MonorepoVcsSteps.preflightTags(duplicateCtx, interactive = false)
+        .assertFailure[IllegalStateException, Seq[MonorepoTagWorkflow.PreflightTagOutcome]](
+          MonorepoTagWorkflow.preflightTags(duplicateCtx, interactive = false)
         ) { err =>
           assert(err.getMessage.contains("releaseIOMonorepoVcsTagName"))
           assert(err.getMessage.contains("[release-v1] -> [core, api]"))
@@ -450,7 +452,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
       )
 
       assertEquals(
-        MonorepoVcsSteps.duplicateTagGroups(entries),
+        MonorepoTagWorkflow.duplicateTagGroups(entries),
         Vector(
           "z-release" -> Vector("core", "docs"),
           "a-release" -> Vector("api", "cli")
@@ -462,7 +464,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
   test("duplicateTagGroups - keep tag-name comparison exact and case-sensitive") {
     IO {
       assertEquals(
-        MonorepoVcsSteps.duplicateTagGroups(
+        MonorepoTagWorkflow.duplicateTagGroups(
           Vector("core" -> "Release-v1", "api" -> "release-v1")
         ),
         Vector.empty
@@ -473,7 +475,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
   test("duplicateTagGroups - handle a large unique batch without duplicate rescans") {
     IO {
       val entries = Vector.tabulate(4096)(index => s"project-$index" -> s"tag-$index")
-      assertEquals(MonorepoVcsSteps.duplicateTagGroups(entries), Vector.empty)
+      assertEquals(MonorepoTagWorkflow.duplicateTagGroups(entries), Vector.empty)
     }
   }
 
@@ -489,8 +491,8 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
         TestSupport.runGit(repo, "tag", "core-v1.0.0")
         TestSupport.runGit(repo, "tag", "api-v2.0.0")
       } *> TestAssertions
-        .assertFailure[IllegalStateException, Seq[MonorepoVcsSteps.PreflightTagOutcome]](
-          MonorepoVcsSteps.preflightTags(ctx, interactive = false)
+        .assertFailure[IllegalStateException, Seq[MonorepoTagWorkflow.PreflightTagOutcome]](
+          MonorepoTagWorkflow.preflightTags(ctx, interactive = false)
         ) { err =>
           assert(err.getMessage.contains("[shared-retry-v1] -> [core, api]"))
         }
@@ -510,7 +512,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
 
       TestAssertions
         .assertFailure[IllegalStateException, MonorepoContext](
-          MonorepoVcsSteps.planTagNames.execute(baseCtx.withState(duplicateState))
+          MonorepoTagWorkflow.planTagNames.execute(baseCtx.withState(duplicateState))
         ) { err =>
           assert(err.getMessage.contains("[post-hook-release] -> [core, api]"))
         }
@@ -531,9 +533,9 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
         )
       )
       val attempt      = for {
-        planned    <- MonorepoVcsSteps.planTagNames.execute(baseCtx.withState(invalidState))
-        taggedCore <- MonorepoVcsSteps.tagReleasesPerProject.execute(planned, core)
-        _          <- MonorepoVcsSteps.tagReleasesPerProject.execute(taggedCore, api)
+        planned    <- MonorepoTagWorkflow.planTagNames.execute(baseCtx.withState(invalidState))
+        taggedCore <- MonorepoTagWorkflow.tagReleasesPerProject.execute(planned, core)
+        _          <- MonorepoTagWorkflow.tagReleasesPerProject.execute(taggedCore, api)
       } yield ()
 
       TestAssertions
@@ -548,7 +550,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
   test("planTagNames.execute - require an initialized VCS for a non-empty batch") {
     twoProjectTagContextResource.use { case (_, _, _, baseCtx) =>
       TestAssertions.assertFailure[IllegalStateException, MonorepoContext](
-        MonorepoVcsSteps.planTagNames.execute(baseCtx.copy(vcs = None))
+        MonorepoTagWorkflow.planTagNames.execute(baseCtx.copy(vcs = None))
       ) { err =>
         assertEquals(
           err.getMessage,
@@ -561,18 +563,18 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
   test("planTagNames.execute - allow an empty batch without an initialized VCS") {
     twoProjectTagContextResource.use { case (_, _, _, baseCtx) =>
       val emptyCtx = baseCtx.copy(vcs = None, projects = Seq.empty)
-      MonorepoVcsSteps.planTagNames
+      MonorepoTagWorkflow.planTagNames
         .execute(emptyCtx)
         .map(result => assert(result eq emptyCtx))
     }
   }
 
-  test("tag-name plan - index planned and previously used reservations") {
+  test("tag-name plan - track planned and previously used reservations") {
     twoProjectTagContextResource.use { case (_, core, api, baseCtx) =>
       val planned = baseCtx.withPlannedTagNames(
         Seq(
-          MonorepoContext.TagPlanEntry(core.ref, core.name, "core-v1.0.0"),
-          MonorepoContext.TagPlanEntry(api.ref, api.name, "api-v2.0.0")
+          MonorepoTagPlan.Entry(core.ref, core.name, "core-v1.0.0"),
+          MonorepoTagPlan.Entry(api.ref, api.name, "api-v2.0.0")
         )
       )
       val used    = planned.recordResolvedTagName(core.ref, "core-retry-v1")
@@ -597,12 +599,12 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
     }
   }
 
-  test("tag-name plan - de-duplicate and order reverse-index owners deterministically") {
+  test("tag-name plan - de-duplicate and order reservation owners deterministically") {
     twoProjectTagContextResource.use { case (_, core, api, baseCtx) =>
       val planned   = baseCtx.withPlannedTagNames(
         Seq(
-          MonorepoContext.TagPlanEntry(core.ref, core.name, "core-v1.0.0"),
-          MonorepoContext.TagPlanEntry(api.ref, api.name, "api-v2.0.0")
+          MonorepoTagPlan.Entry(core.ref, core.name, "core-v1.0.0"),
+          MonorepoTagPlan.Entry(api.ref, api.name, "api-v2.0.0")
         )
       )
       val sameOwner = planned.recordResolvedTagName(core.ref, "core-v1.0.0")
@@ -634,7 +636,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
   test("tagReleasesPerProject.execute - reject a retry name reserved for another project") {
     twoProjectTagContextResource.use { case (repo, core, _, baseCtx) =>
       for {
-        planned <- MonorepoVcsSteps.planTagNames.execute(baseCtx)
+        planned <- MonorepoTagWorkflow.planTagNames.execute(baseCtx)
         _       <- IO.blocking(TestSupport.runGit(repo, "tag", "core-v1.0.0"))
         ctx      = withFlags(
                      planned,
@@ -642,7 +644,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
                      tagExistsAnswer = Some("api-v2.0.0")
                    )
         _       <- TestAssertions.assertFailure[IllegalStateException, MonorepoContext](
-                     MonorepoVcsSteps.tagReleasesPerProject.execute(ctx, core)
+                     MonorepoTagWorkflow.tagReleasesPerProject.execute(ctx, core)
                    ) { err =>
                      assert(err.getMessage.contains("reserves it for [api]"))
                    }
@@ -654,7 +656,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
   test("tagReleasesPerProject.execute - reject a retry name already used by another project") {
     twoProjectTagContextResource.use { case (repo, core, api, baseCtx) =>
       for {
-        planned <- MonorepoVcsSteps.planTagNames.execute(baseCtx)
+        planned <- MonorepoTagWorkflow.planTagNames.execute(baseCtx)
         _       <- IO.blocking(TestSupport.runGit(repo, "tag", "api-v2.0.0"))
         ctx      = withFlags(
                      planned.recordResolvedTagName(core.ref, "core-retry-v1"),
@@ -662,7 +664,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
                      tagExistsAnswer = Some("core-retry-v1")
                    )
         _       <- TestAssertions.assertFailure[IllegalStateException, MonorepoContext](
-                     MonorepoVcsSteps.tagReleasesPerProject.execute(ctx, api)
+                     MonorepoTagWorkflow.tagReleasesPerProject.execute(ctx, api)
                    ) { err =>
                      assert(err.getMessage.contains("reserves it for [core]"))
                    }
@@ -697,12 +699,12 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
                                useDefaults = false,
                                tagExistsAnswer = Some("k")
                              )
-        outcomes          <- MonorepoVcsSteps.preflightTags(ctx, interactive = false)
+        outcomes          <- MonorepoTagWorkflow.preflightTags(ctx, interactive = false)
       } yield {
         assertEquals(
           outcomes,
           Seq(
-            MonorepoVcsSteps.PreflightTagOutcome(
+            MonorepoTagWorkflow.PreflightTagOutcome(
               "core",
               "core-v1.0.0",
               "exists; release will keep the existing tag",
@@ -723,8 +725,8 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
 
       IO.blocking(TestSupport.runGit(repo, "tag", "core-v1.0.0")) *>
         TestAssertions
-          .assertFailure[IllegalStateException, Seq[MonorepoVcsSteps.PreflightTagOutcome]](
-            MonorepoVcsSteps.preflightTags(
+          .assertFailure[IllegalStateException, Seq[MonorepoTagWorkflow.PreflightTagOutcome]](
+            MonorepoTagWorkflow.preflightTags(
               ctx,
               interactive = false,
               _ => IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
@@ -745,7 +747,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
       val ctx = withFlags(baseCtx, useDefaults = false)
 
       IO.blocking(TestSupport.runGit(repo, "tag", "core-v1.0.0")) *>
-        MonorepoVcsSteps
+        MonorepoTagWorkflow
           .preflightTags(
             ctx,
             interactive = true,
@@ -755,7 +757,7 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
             assertEquals(
               outcomes,
               Seq(
-                MonorepoVcsSteps.PreflightTagOutcome(
+                MonorepoTagWorkflow.PreflightTagOutcome(
                   "core",
                   "core-v1.0.0",
                   "exists; release will create a new commit before tagging, so interactive release will prompt for overwrite, abort, or a new tag",
@@ -788,9 +790,9 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
         _          <- TestAssertions
                         .assertFailure[
                           IllegalStateException,
-                          Seq[MonorepoVcsSteps.PreflightTagOutcome]
+                          Seq[MonorepoTagWorkflow.PreflightTagOutcome]
                         ](
-                          MonorepoVcsSteps.preflightTags(
+                          MonorepoTagWorkflow.preflightTags(
                             ctx,
                             interactive = false,
                             _ => IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
@@ -809,12 +811,12 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
 
   test("preflightTags - warn when releaseIOMonorepoVcsTagName drops the wildcard arg") {
     brokenWildcardTagFormatterResource.use { case (_, ctx, buffer) =>
-      MonorepoVcsSteps.preflightTags(ctx, interactive = false).map { outcomes =>
+      MonorepoTagWorkflow.preflightTags(ctx, interactive = false).map { outcomes =>
         val log = buffer.toString("UTF-8")
         assertEquals(
           outcomes,
           Seq(
-            MonorepoVcsSteps.PreflightTagOutcome(
+            MonorepoTagWorkflow.PreflightTagOutcome(
               "core",
               "core-release",
               "available",
@@ -842,12 +844,12 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
     "preflightTags - tolerate releaseIOMonorepoVcsTagName that throws on the wildcard probe"
   ) {
     throwingWildcardTagFormatterResource.use { case (_, ctx, buffer) =>
-      MonorepoVcsSteps.preflightTags(ctx, interactive = false).map { outcomes =>
+      MonorepoTagWorkflow.preflightTags(ctx, interactive = false).map { outcomes =>
         val log = buffer.toString("UTF-8")
         assertEquals(
           outcomes,
           Seq(
-            MonorepoVcsSteps.PreflightTagOutcome(
+            MonorepoTagWorkflow.PreflightTagOutcome(
               "core",
               "core-v1.0.0",
               "available",
@@ -875,8 +877,8 @@ class MonorepoVcsStepsSpec extends CatsEffectSuite {
 
       IO.blocking(TestSupport.runGit(repo, "tag", "core-v1.0.0")) *>
         TestAssertions
-          .assertFailure[IllegalStateException, Seq[MonorepoVcsSteps.PreflightTagOutcome]](
-            MonorepoVcsSteps.preflightTags(ctx, interactive = false)
+          .assertFailure[IllegalStateException, Seq[MonorepoTagWorkflow.PreflightTagOutcome]](
+            MonorepoTagWorkflow.preflightTags(ctx, interactive = false)
           ) { err =>
             assert(err.getMessage.contains("releaseMonorepoCustom help"))
             assert(!err.getMessage.contains("releaseIOMonorepo help"))

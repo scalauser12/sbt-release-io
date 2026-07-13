@@ -1,4 +1,4 @@
-# Test: commitIfChanged skips commit when tracked status is empty (monorepo)
+# Test: the conditional version commit skips an empty tracked diff (monorepo)
 # Pre-commit the release version so set-release-version writes the same content,
 # causing commit-release-versions to see no changes and skip the commit.
 $ exec git init

@@ -7,7 +7,7 @@ import io.release.monorepo.*
 import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
 import io.release.monorepo.internal.steps.MonorepoReleaseSteps
 import io.release.monorepo.internal.steps.MonorepoStepHelpers
-import io.release.monorepo.internal.steps.MonorepoVcsSteps
+import io.release.monorepo.internal.steps.MonorepoTagWorkflow
 import io.release.runtime.HookPhases
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.command.CheckModeOutput
@@ -106,15 +106,14 @@ private[monorepo] object MonorepoPreflight {
   def check(
       session: MonorepoPreparedSession,
       steps: Seq[AnyStep]
-  ): IO[Summary] = {
-    val processPlan = MonorepoProcessPlan.analyze(steps)
-    val checkSteps  = CheckSteps(processPlan)
+  ): IO[Summary] =
+    IO.fromEither(MonorepoProcessPlan.analyze(steps)).flatMap { processPlan =>
+      val checkSteps = CheckSteps(processPlan)
 
-    for {
-      baseCtx <- resolveBaseContext(session.context, processPlan)
-      checked <- ExecutionEngine.raiseIfFailed(baseCtx)
-      summary <- if (processPlan.hasSelectionBoundary)
-                   checkWithSelectionBoundary(
+      for {
+        baseCtx <- resolveBaseContext(session.context, processPlan)
+        checked <- ExecutionEngine.raiseIfFailed(baseCtx)
+        summary <- checkWithSelectionBoundary(
                      checked,
                      session.plan,
                      processPlan,
@@ -122,16 +121,8 @@ private[monorepo] object MonorepoPreflight {
                      session.flags.crossBuild,
                      session.configuredInteractive
                    )
-                 else
-                   checkWithoutSelectionBoundary(
-                     checked,
-                     processPlan,
-                     checkSteps,
-                     session.flags.crossBuild,
-                     session.configuredInteractive
-                   )
-    } yield summary
-  }
+      } yield summary
+    }
 
   private def checkWithSelectionBoundary(
       baseCtx: MonorepoContext,
@@ -189,55 +180,6 @@ private[monorepo] object MonorepoPreflight {
             )
         }
     } yield summary
-
-  private def checkWithoutSelectionBoundary(
-      baseCtx: MonorepoContext,
-      processPlan: MonorepoProcessPlan,
-      checkSteps: CheckSteps,
-      crossBuildEnabled: Boolean,
-      tagPreflightInteractive: Boolean
-  ): IO[Summary] = {
-    val selectionMode =
-      Evaluation.NotEvaluated(stepNotInCheckProcess(DetectOrSelectProjectsStep))
-    val projects      = Evaluation.Resolved(())
-
-    if (!containsHook(processPlan.mainSteps, NoBoundarySetupHookPhases))
-      checkVersionAwareSegment(
-        baseCtx = baseCtx,
-        selectionMode = selectionMode,
-        projects = projects,
-        processPlan = processPlan,
-        checkSteps = checkSteps,
-        crossBuildEnabled = crossBuildEnabled,
-        tagPreflightInteractive = tagPreflightInteractive
-      )
-    else
-      for {
-        prefixValidated <- validateStableSetupPrefix(
-                             processPlan.mainSteps,
-                             NoBoundarySetupHookPhases,
-                             "no-boundary",
-                             crossBuildEnabled
-                           )(baseCtx)
-        checkedCtx      <- ExecutionEngine.raiseIfFailed(prefixValidated)
-        versionSnapshot <- resolveVersionSnapshot(checkedCtx, projects, checkSteps)
-        tagOutcomes     <- resolveTagSnapshot(
-                             checkedCtx,
-                             versionSnapshot,
-                             checkSteps,
-                             tagPreflightInteractive
-                           )
-        summary         <- buildSummary(
-                             selectionMode = selectionMode,
-                             projects = projects,
-                             versions = versionSnapshot.versions,
-                             ctx = checkedCtx,
-                             tagOutcomes = tagOutcomes,
-                             processPlan = processPlan,
-                             crossBuildEnabled = crossBuildEnabled
-                           )
-      } yield summary
-  }
 
   private def checkVersionAwareSegment(
       baseCtx: MonorepoContext,
@@ -328,9 +270,6 @@ private[monorepo] object MonorepoPreflight {
     notify *> validateSegment(safePrefix, crossBuild)(ctx)
   }
 
-  private def containsHook(steps: Seq[AnyStep], hookPhases: Set[String]): Boolean =
-    steps.exists(step => hookPhases.exists(phase => step.name.startsWith(s"$phase:")))
-
   private[monorepo] def builtInReleaseWritesWouldChange(ctx: MonorepoContext): IO[Boolean] =
     // Sequential traverse: MonorepoVersionFiles.resolveInputs reads sbt state, which is not
     // safe for concurrent fiber access.
@@ -364,7 +303,7 @@ private[monorepo] object MonorepoPreflight {
   private[monorepo] def renderProjects(
       projects: Seq[ProjectReleaseInfo],
       versions: Evaluation[Unit],
-      tagOutcomes: Evaluation[Seq[MonorepoVcsSteps.PreflightTagOutcome]]
+      tagOutcomes: Evaluation[Seq[MonorepoTagWorkflow.PreflightTagOutcome]]
   ): IO[Seq[ProjectSummary]] = {
     val tagEvaluations: IO[Seq[Evaluation[ProjectTag]]] = tagOutcomes match {
       case Evaluation.NotEvaluated(reason) =>
@@ -428,8 +367,6 @@ private[monorepo] object MonorepoPreflight {
     HookPhases.AfterCleanCheck,
     HookPhases.BeforeSelection
   )
-  private val NoBoundarySetupHookPhases       =
-    SelectionBlockingPhases + HookPhases.AfterSelection
   private val ProjectSummaryMutationPhases    =
     SelectionBlockingPhases ++ Set(HookPhases.AfterSelection)
   private val VersionResolutionBlockingPhases =
@@ -564,7 +501,7 @@ private[monorepo] object MonorepoPreflight {
       versionSnapshot: VersionSnapshot,
       checkSteps: CheckSteps,
       tagPreflightInteractive: Boolean
-  ): IO[Evaluation[Seq[MonorepoVcsSteps.PreflightTagOutcome]]] =
+  ): IO[Evaluation[Seq[MonorepoTagWorkflow.PreflightTagOutcome]]] =
     Evaluation.guarded(
       !checkSteps.shouldPreflightTags         -> stepNotInCheckProcess(TagReleasesStep),
       !checkSteps.tagFollowsVersionResolution -> TagsRuntimeSetup,
@@ -584,12 +521,12 @@ private[monorepo] object MonorepoPreflight {
       ctx: MonorepoContext,
       builtInTagPreflightIncludesReleaseWriteAndCommit: Boolean,
       tagPreflightInteractive: Boolean
-  ): IO[Seq[MonorepoVcsSteps.PreflightTagOutcome]] =
+  ): IO[Seq[MonorepoTagWorkflow.PreflightTagOutcome]] =
     PreflightPhaseGroups.dispatchPreflightTag(
       builtInTagPreflightIncludesReleaseWriteAndCommit,
       builtInReleaseWritesWouldChange(ctx),
-      _.fold(MonorepoVcsSteps.preflightTags(ctx, tagPreflightInteractive))(callback =>
-        MonorepoVcsSteps.preflightTags(ctx, tagPreflightInteractive, callback)
+      _.fold(MonorepoTagWorkflow.preflightTags(ctx, tagPreflightInteractive))(callback =>
+        MonorepoTagWorkflow.preflightTags(ctx, tagPreflightInteractive, callback)
       )
     )
 
@@ -598,7 +535,7 @@ private[monorepo] object MonorepoPreflight {
       projects: Evaluation[Unit],
       versions: Evaluation[Unit],
       ctx: MonorepoContext,
-      tagOutcomes: Evaluation[Seq[MonorepoVcsSteps.PreflightTagOutcome]],
+      tagOutcomes: Evaluation[Seq[MonorepoTagWorkflow.PreflightTagOutcome]],
       processPlan: MonorepoProcessPlan,
       crossBuildEnabled: Boolean
   ): IO[Summary] = {

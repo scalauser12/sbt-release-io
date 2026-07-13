@@ -16,7 +16,7 @@ import java.io.File
 
 class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecSupport {
 
-  test("compose - run global validation before execute when no selection boundary exists") {
+  test("compose - run global validation before execute in the canonical main segment") {
     contextResource.use { ctx =>
       Ref.of[IO, List[String]](Nil).flatMap { log =>
         val step = ProcessStep.Single[MonorepoContext](
@@ -26,7 +26,7 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
           execute = c => log.update(_ :+ "execute").as(c)
         )
 
-        MonorepoComposer.compose(Seq(step))(ctx).flatMap { result =>
+        composeCanonical(Seq(step))(ctx).flatMap { result =>
           log.get.map { obs =>
             assertEquals(obs, List("validate:false", "execute"))
             assertEquals(result.state.onFailure, None)
@@ -45,7 +45,7 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
           execute = c => log.update(_ :+ "execute").as(c)
         )
 
-        MonorepoComposer.compose(Seq(step))(ctx).attempt.flatMap { result =>
+        composeCanonical(Seq(step))(ctx).attempt.flatMap { result =>
           log.get.map { obs =>
             assert(result.isLeft)
             result.left.foreach {
@@ -70,7 +70,7 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
             execute = (c, proj) => log.update(_ :+ proj.name).as(c)
           )
 
-          MonorepoComposer.compose(Seq(step))(pCtx) *>
+          composeCanonical(Seq(step))(pCtx) *>
             log.get.map(obs => assertEquals(obs, List("core", "api")))
         }
       }
@@ -95,7 +95,7 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
               observed.update(_ :+ s"execute:${project.name}").as(currentCtx)
           )
 
-          MonorepoComposer.compose(Seq(step))(pCtx).flatMap { result =>
+          composeCanonical(Seq(step))(pCtx).flatMap { result =>
             observed.get.map { obs =>
               assert(result.failed)
               assertEquals(obs, List("validate:core"))
@@ -267,7 +267,7 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
           else IO.raiseError(new RuntimeException("metadata not threaded"))
       )
 
-      MonorepoComposer.compose(Seq(step1, step2))(ctx).map { result =>
+      composeCanonical(Seq(step1, step2))(ctx).map { result =>
         assertEquals(result.metadata(metadataKey), Some("true"))
       }
     }
@@ -296,7 +296,7 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
         }
       )
 
-      MonorepoComposer.compose(Seq(step1, step2))(ctx).map { result =>
+      composeCanonical(Seq(step1, step2))(ctx).map { result =>
         assertEquals(result.metadata(metadataKey), Some("observed"))
       }
     }
@@ -309,7 +309,7 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
         execute = _ => IO.raiseError(new RuntimeException("global failure"))
       )
 
-      MonorepoComposer.compose(Seq(step))(ctx).map { result =>
+      composeCanonical(Seq(step))(ctx).map { result =>
         assert(result.failed)
         result.failureCause match {
           case Some(err: RuntimeException) =>
@@ -334,7 +334,7 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
             else IO.pure(c)
         )
 
-        MonorepoComposer.compose(Seq(failingStep))(pCtx).map { result =>
+        composeCanonical(Seq(failingStep))(pCtx).map { result =>
           val aggregate = requireProjectFailures(result.failureCause)
           assert(result.failed)
           assert(aggregate.failures.map(_.projectName).contains("core"))
@@ -365,7 +365,7 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
               }
           )
 
-          MonorepoComposer.compose(Seq(failStep))(pCtx).flatMap { result =>
+          composeCanonical(Seq(failStep))(pCtx).flatMap { result =>
             observed.get.map { obs =>
               assert(result.failed)
               assertEquals(obs, List("core"))
@@ -400,8 +400,7 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
             execute = c => observed.update(_ :+ "after").as(c)
           )
 
-          MonorepoComposer
-            .compose(Seq(injectFailure, skipped))(pCtx)
+          composeCanonical(Seq(injectFailure, skipped))(pCtx)
             .flatMap { result =>
               observed.get.map { obs =>
                 assert(result.failed)
@@ -443,7 +442,7 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
         val expected   =
           "mark-failed-with-sentinel: sbt action reported failure via FailureCommand"
 
-        MonorepoComposer.compose(Seq(markFailed, skipped))(ctx).flatMap { result =>
+        composeCanonical(Seq(markFailed, skipped))(ctx).flatMap { result =>
           observed.get.flatMap { events =>
             assert(result.failed)
             assertEquals(result.failureCause.map(_.getMessage), Some(expected))
@@ -492,8 +491,7 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
             execute = c => observed.update(_ :+ "after").as(c)
           )
 
-          MonorepoComposer
-            .compose(Seq(injectFailure, skipped))(pCtx)
+          composeCanonical(Seq(injectFailure, skipped))(pCtx)
             .flatMap { result =>
               observed.get.map { obs =>
                 assert(result.failed)
@@ -535,7 +533,7 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
                 )
           )
 
-          MonorepoComposer.compose(Seq(injectFailure))(pCtx).flatMap { result =>
+          composeCanonical(Seq(injectFailure))(pCtx).flatMap { result =>
             observed.get.map { obs =>
               assert(result.failed)
               assertEquals(obs, List("core"))
@@ -668,7 +666,7 @@ class MonorepoStepIOComposeSpec extends CatsEffectSuite with MonorepoStepIOSpecS
               IO.raiseError(new RuntimeException("tracked project failure"))
         )
 
-        MonorepoComposer.compose(Seq(failingStep))(pCtx).map { result =>
+        composeCanonical(Seq(failingStep))(pCtx).map { result =>
           val aggregate = requireProjectFailures(result.failureCause)
           assert(result.failed)
           assertEquals(result.metadata(metadataKey), Some("core"))

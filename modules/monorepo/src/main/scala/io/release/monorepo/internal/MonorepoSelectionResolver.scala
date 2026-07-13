@@ -19,11 +19,6 @@ private[monorepo] object MonorepoSelectionResolver {
       selectionMode: SelectionMode
   )
 
-  private final case class ResolvedSelectionInputs(
-      orderedProjects: Seq[ProjectReleaseInfo],
-      plan: MonorepoReleasePlan
-  )
-
   private final case class DetectionSettings(
       detectChanges: Boolean,
       includeDownstream: Boolean,
@@ -55,69 +50,46 @@ private[monorepo] object MonorepoSelectionResolver {
       plan: MonorepoReleasePlan
   ): IO[SelectionResult] =
     for {
-      inputs          <- resolveSelectionInputs(ctx, plan)
-      selectionResult <- selectProjects(ctx, inputs)
-      _               <- validateSelectedOverrides(selectionResult, inputs.plan)
+      liveOrdered     <- MonorepoProjectResolver.resolveOrdered(ctx.state)
+      orderedProjects  = MonorepoProjectResolver.mergeSnapshot(ctx.projects, liveOrdered)
+      _               <- IO.fromEither(
+                           validateResolvedProjects(orderedProjects, plan).left
+                             .map(new IllegalStateException(_))
+                         )
+      selectionResult <- selectProjects(ctx, orderedProjects, plan)
+      _               <- validateUnusedOverrides(selectionResult.projects, plan)
       withVersions     = MonorepoProjectResolver.applyVersionOverrides(
                            selectionResult.projects,
-                           inputs.plan
+                           plan
                          )
     } yield SelectionResult(
       projects = withVersions,
       selectionMode = selectionResult.selectionMode
     )
 
-  private def resolveSelectionInputs(
-      ctx: MonorepoContext,
-      plan: MonorepoReleasePlan
-  ): IO[ResolvedSelectionInputs] =
-    for {
-      liveOrdered    <- MonorepoProjectResolver.resolveOrdered(ctx.state)
-      orderedProjects = MonorepoProjectResolver.mergeSnapshot(ctx.projects, liveOrdered)
-      validatedPlan  <-
-        IO.fromEither(
-          validateResolvedProjects(orderedProjects, plan).left.map(new IllegalStateException(_))
-        )
-    } yield ResolvedSelectionInputs(orderedProjects, validatedPlan)
-
   private def selectProjects(
       ctx: MonorepoContext,
-      inputs: ResolvedSelectionInputs
+      orderedProjects: Seq[ProjectReleaseInfo],
+      plan: MonorepoReleasePlan
   ): IO[SelectionResult] =
-    inputs.plan.selectionMode match {
+    plan.selectionMode match {
       case SelectionMode.ExplicitSelection =>
         IO.pure(
           SelectionResult(
-            projects = inputs.orderedProjects.filter(project =>
-              inputs.plan.selectedNames.contains(project.name)
-            ),
+            projects = orderedProjects.filter(project => plan.selectedNames.contains(project.name)),
             selectionMode = SelectionMode.ExplicitSelection
           )
         )
       case SelectionMode.AllChanged        =>
         IO.pure(
           SelectionResult(
-            projects = inputs.orderedProjects,
+            projects = orderedProjects,
             selectionMode = SelectionMode.AllChanged
           )
         )
       case SelectionMode.DetectChanges     =>
-        resolveDetectChanges(
-          ctx,
-          inputs.orderedProjects,
-          inputs.plan
-        ).map { case (projects, selectionMode) =>
-          SelectionResult(projects = projects, selectionMode = selectionMode)
-        }
+        resolveDetectChanges(ctx, orderedProjects, plan)
     }
-
-  private def validateSelectedOverrides(
-      selectionResult: SelectionResult,
-      plan: MonorepoReleasePlan
-  ): IO[Unit] =
-    if (selectionResult.selectionMode != SelectionMode.AllChanged)
-      validateUnusedOverrides(selectionResult.projects, plan)
-    else IO.unit
 
   // ── Detection helpers ───────────────────────────────────────────────
 
@@ -125,50 +97,46 @@ private[monorepo] object MonorepoSelectionResolver {
       ctx: MonorepoContext,
       ordered: Seq[ProjectReleaseInfo],
       validated: MonorepoReleasePlan
-  ): IO[(Seq[ProjectReleaseInfo], SelectionMode)] =
+  ): IO[SelectionResult] =
     resolveDetectionSettings(ctx.state).flatMap { settings =>
-      detectSelectedProjects(ctx, ordered, settings).flatMap { case (detected, mode) =>
-        forceIncludeOverridden(ctx, ordered, detected, validated).map(_ -> mode)
-      }
+      if (!settings.detectChanges)
+        IO.pure(SelectionResult(ordered, SelectionMode.AllChanged))
+      else
+        detectSelectedProjects(ctx, ordered, settings)
+          .flatMap(forceIncludeOverridden(ctx, ordered, _, validated))
+          .map(SelectionResult(_, SelectionMode.DetectChanges))
     }
 
   private def detectSelectedProjects(
       ctx: MonorepoContext,
       orderedProjects: Seq[ProjectReleaseInfo],
       settings: DetectionSettings
-  ): IO[(Seq[ProjectReleaseInfo], SelectionMode)] =
-    if (!settings.detectChanges)
-      IO.pure((orderedProjects, SelectionMode.AllChanged))
-    else {
-      val detected = settings.customDetector match {
-        case Some(detector) =>
-          detectWithCustomDetector(ctx, orderedProjects, detector)
-        case None           =>
-          for {
-            tagSettings           <- MonorepoTagSettings.resolveTagSettings(ctx.state)
-            vcs                   <- IO.fromOption(ctx.vcs)(
-                                       new IllegalStateException("VCS not initialized")
-                                     )
-            loadedProjectBaseDirs <- MonorepoProjectResolver.resolveLoadedBaseDirs(ctx.state)
-            changed               <- ChangeDetection.detectChangedProjects(
-                                       vcs,
-                                       orderedProjects,
-                                       tagSettings.perProjectTagName,
-                                       ctx.state,
-                                       settings.userExcludes,
-                                       settings.sharedPaths,
-                                       loadedProjectBaseDirs
-                                     )
-          } yield changed
-      }
-
-      if (!settings.includeDownstream) detected.map((_, SelectionMode.DetectChanges))
-      else
-        detected.flatMap { directlyChanged =>
-          expandToDownstream(ctx, orderedProjects, directlyChanged)
-            .map((_, SelectionMode.DetectChanges))
-        }
+  ): IO[Seq[ProjectReleaseInfo]] = {
+    val detected = settings.customDetector match {
+      case Some(detector) =>
+        detectWithCustomDetector(ctx, orderedProjects, detector)
+      case None           =>
+        for {
+          tagSettings           <- MonorepoTagSettings.resolveTagSettings(ctx.state)
+          vcs                   <- IO.fromOption(ctx.vcs)(
+                                     new IllegalStateException("VCS not initialized")
+                                   )
+          loadedProjectBaseDirs <- MonorepoProjectResolver.resolveLoadedBaseDirs(ctx.state)
+          changed               <- ChangeDetection.detectChangedProjects(
+                                     vcs,
+                                     orderedProjects,
+                                     tagSettings.perProjectTagName,
+                                     ctx.state,
+                                     settings.userExcludes,
+                                     settings.sharedPaths,
+                                     loadedProjectBaseDirs
+                                   )
+        } yield changed
     }
+
+    if (!settings.includeDownstream) detected
+    else detected.flatMap(expandToDownstream(ctx, orderedProjects, _))
+  }
 
   private def resolveDetectionSettings(state: State): IO[DetectionSettings] =
     IO.blocking {
@@ -220,7 +188,7 @@ private[monorepo] object MonorepoSelectionResolver {
   private[monorepo] def validateResolvedProjects(
       allProjects: Seq[ProjectReleaseInfo],
       plan: MonorepoReleasePlan
-  ): Either[String, MonorepoReleasePlan] = {
+  ): Either[String, Unit] = {
     val duplicateNames    = findDuplicateProjectNames(allProjects)
     val validNames        = allProjects.map(_.name).toSet
     val invalidOverrides  =
@@ -247,7 +215,7 @@ private[monorepo] object MonorepoSelectionResolver {
                s"Available: ${validNames.mkString(", ")}. " +
                "See `releaseIOMonorepo help` for selection syntax."
            )
-    } yield plan
+    } yield ()
   }
 
   private def findDuplicateProjectNames(

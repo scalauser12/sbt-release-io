@@ -2,13 +2,29 @@ package io.release.monorepo.internal.steps
 
 import cats.effect.IO
 import cats.effect.Resource
+import io.release.monorepo.MonorepoContext
 import io.release.monorepo.MonorepoSpecSupport
 import io.release.monorepo.internal.*
+import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
+import io.release.runtime.engine.BuiltInStepRole
+import io.release.runtime.engine.ProcessStep
 import sbt.Def
 
 import java.io.File
 
 trait MonorepoPublishStepsSpecSupport {
+
+  private val selectionBoundary: AnyStep = ProcessStep.Single[MonorepoContext](
+    name = MonorepoComposer.SelectionBoundary,
+    execute = ctx => IO.pure(ctx),
+    roles = Set(BuiltInStepRole.SelectionBoundary)
+  )
+
+  protected def composeCanonical(
+      steps: Seq[AnyStep],
+      crossBuild: Boolean = false
+  )(ctx: MonorepoContext): IO[MonorepoContext] =
+    MonorepoComposer.compose(selectionBoundary +: steps, crossBuild)(ctx)
 
   protected def singleProjectFixtureResource(
       prefix: String,

@@ -5,7 +5,7 @@ import io.release.VcsOps
 import io.release.monorepo.*
 import io.release.monorepo.internal.MonorepoStepAliases.AnyStep
 import io.release.monorepo.internal.steps.MonorepoCrossBuild
-import io.release.monorepo.internal.steps.MonorepoPublishSteps
+import io.release.monorepo.internal.steps.MonorepoPublishWorkflow
 import io.release.runtime.ReleaseLogPrefixes
 import io.release.runtime.TrackedContextHandle
 import io.release.runtime.engine.BuiltInStepRole
@@ -18,20 +18,6 @@ import io.release.runtime.workflow.DecisionResolver
 private[monorepo] object MonorepoComposer {
 
   private val LogPrefix = ReleaseLogPrefixes.Monorepo
-
-  private[monorepo] sealed trait PublishValidationMode {
-    def refreshExecutedPrelude: Boolean
-  }
-
-  private[monorepo] object PublishValidationMode {
-    case object PreservePrelude extends PublishValidationMode {
-      override val refreshExecutedPrelude: Boolean = false
-    }
-
-    case object RefreshExecutedPrelude extends PublishValidationMode {
-      override val refreshExecutedPrelude: Boolean = true
-    }
-  }
 
   /** Step name that divides the release process into two segments:
     *  - '''Setup''' (through post-selection hooks): steps run sequentially, each validated then
@@ -49,16 +35,13 @@ private[monorepo] object MonorepoComposer {
       crossBuild: Boolean = false
   )(
       initialCtx: MonorepoContext
-  ): IO[MonorepoContext] = {
-    val plan = MonorepoProcessPlan.analyze(steps)
-
-    if (plan.hasSelectionBoundary)
+  ): IO[MonorepoContext] =
+    IO.fromEither(MonorepoProcessPlan.analyze(steps)).flatMap { plan =>
       for {
         preSetupCtx  <- runSequentialValidateThenExecute(
                           plan.preSelectionSetupSteps,
                           initialCtx,
-                          crossBuild,
-                          PublishValidationMode.PreservePrelude
+                          crossBuild
                         )
         preparedCtx  <- haltIfFailed(preSetupCtx) { ctx =>
                           preparePushIfDecisionAllows(ctx, plan.mainSteps)
@@ -67,8 +50,7 @@ private[monorepo] object MonorepoComposer {
                           runSequentialValidateThenExecute(
                             plan.postSelectionSetupSteps,
                             ctx,
-                            crossBuild,
-                            PublishValidationMode.PreservePrelude
+                            crossBuild
                           )
                         }
         finalCtx     <- haltIfFailed(postSetupCtx) { ctx =>
@@ -76,17 +58,7 @@ private[monorepo] object MonorepoComposer {
                             runMainSegment(plan.mainSteps, ctx, crossBuild)
                         }
       } yield finalCtx
-    else
-      preparePushIfDecisionAllows(initialCtx, steps)
-        .flatMap(
-          runSequentialValidateThenExecute(
-            steps,
-            _,
-            crossBuild,
-            PublishValidationMode.RefreshExecutedPrelude
-          )
-        )
-  }
+    }
 
   private def haltIfFailed(ctx: MonorepoContext)(
       next: MonorepoContext => IO[MonorepoContext]
@@ -100,7 +72,8 @@ private[monorepo] object MonorepoComposer {
     * would later decline cleanly.
     *
     * Also seeds `pushConfigured` from the compiled steps so downstream consumers
-    * (notably the remote tag preflight in [[MonorepoVcsSteps]]) can suppress
+    * (notably the remote tag preflight in
+    * [[io.release.monorepo.internal.steps.MonorepoTagWorkflow]]) can suppress
     * the network probe when `push-changes` is absent from the plan
     * (`releaseIOMonorepoPolicyEnablePush := false`). The flag is observed once
     * at the entry point of release execution and survives intervening
@@ -133,32 +106,29 @@ private[monorepo] object MonorepoComposer {
   ): IO[MonorepoContext] =
     ExecutionEngine.runMainSegment(
       logPrefix = LogPrefix,
-      steps = preparedSteps(steps, crossBuild, PublishValidationMode.PreservePrelude),
+      steps = preparedSteps(steps, crossBuild),
       startCtx = startCtx
     )
 
   private def runSequentialValidateThenExecute(
       steps: Seq[AnyStep],
       startCtx: MonorepoContext,
-      crossBuild: Boolean,
-      publishValidationMode: PublishValidationMode
+      crossBuild: Boolean
   ): IO[MonorepoContext] =
     ExecutionEngine.runSequentialValidateThenExecute(
-      steps = preparedSteps(steps, crossBuild, publishValidationMode),
+      steps = preparedSteps(steps, crossBuild),
       startCtx = startCtx
     )
 
   private[monorepo] def preparedSteps(
       steps: Seq[AnyStep],
-      crossBuild: Boolean,
-      publishValidationMode: PublishValidationMode = PublishValidationMode.PreservePrelude
+      crossBuild: Boolean
   ): Seq[ExecutionEngine.PreparedStep[MonorepoContext]] =
-    steps.map(asPreparedStep(_, crossBuild, publishValidationMode))
+    steps.map(asPreparedStep(_, crossBuild))
 
   private def asPreparedStep(
       step: AnyStep,
-      crossBuild: Boolean,
-      publishValidationMode: PublishValidationMode
+      crossBuild: Boolean
   ): ExecutionEngine.PreparedStep[MonorepoContext] =
     ProcessStep.fold(step)(
       single =>
@@ -184,12 +154,8 @@ private[monorepo] object MonorepoComposer {
           validate = ctx =>
             if (typed.hasRole(BuiltInStepRole.PublishArtifacts))
               IO
-                .pure(
-                  ctx.beginPublishValidationBatch(
-                    refreshExecutedPrelude = publishValidationMode.refreshExecutedPrelude
-                  )
-                )
-                .flatMap(MonorepoPublishSteps.preparePublishValidation)
+                .pure(ctx.beginPublishValidationBatch)
+                .flatMap(MonorepoPublishWorkflow.preparePublishValidation)
                 .flatMap { preparedCtx =>
                   MonorepoCrossBuild.validatePerProjectWithCrossBuild(
                     preparedCtx,

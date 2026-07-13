@@ -88,10 +88,10 @@ flowchart LR
 
 - Registration: [`MonorepoReleasePlugin`](../modules/monorepo/src/main/scala/io/release/monorepo/MonorepoReleasePlugin.scala)
 - CLI, planning, merge/compile: [`MonorepoCommandExecution`](../modules/monorepo/src/main/scala/io/release/monorepo/internal/MonorepoCommandExecution.scala)
-- Selection boundary (default built-in flow) — see [`MonorepoComposer`](../modules/monorepo/src/main/scala/io/release/monorepo/internal/MonorepoComposer.scala):
+- Required selection boundary — see [`MonorepoComposer`](../modules/monorepo/src/main/scala/io/release/monorepo/internal/MonorepoComposer.scala):
   - **Setup segment** runs sequential validate-then-execute through `detect-or-select-projects` and any immediately following `after-selection:*` hooks.
   - **Main segment** runs validate-all-then-execute (same engine mode as core main).
-  - **Fallback:** if no selection-boundary step is present, the whole process runs sequential validate-then-execute.
+  - Compiled monorepo processes must contain exactly one selection-boundary step; invalid internal workflows fail before validation or execution starts.
 
 ## Glossary
 

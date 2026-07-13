@@ -7,7 +7,6 @@ import io.release.ReleaseSharedKeys.releaseIOVcsSign
 import io.release.ReleaseSharedKeys.releaseIOVcsSignOff
 import io.release.VcsOps
 import io.release.monorepo.MonorepoContext
-import io.release.monorepo.ProjectReleaseInfo
 import io.release.monorepo.internal.MonorepoVersionFiles
 import io.release.monorepo.internal.steps.MonorepoStepHelpers.logInfo
 import io.release.monorepo.internal.steps.MonorepoStepHelpers.versionSummary
@@ -23,29 +22,12 @@ private[monorepo] object MonorepoVersionCommitHelpers {
   private def resolveRelativePaths(
       ctx: MonorepoContext,
       vcs: Vcs
-  ): IO[Seq[(ProjectReleaseInfo, String)]] =
+  ): IO[Seq[String]] =
     ctx.currentProjects.toList.traverse { project =>
-      VcsOps.relativizeToBase(vcs, project.versionFile).map(rel => (project, rel))
+      VcsOps.relativizeToBase(vcs, project.versionFile)
     }
 
   // ── VCS commit ────────────────────────────────────────────────────────
-
-  /** Commit already-staged tracked changes when the tracked status is non-empty. */
-  private[steps] def commitIfChanged(
-      ctx: MonorepoContext,
-      vcs: Vcs,
-      msg: String,
-      sign: Boolean,
-      signOff: Boolean
-  ): IO[MonorepoContext] =
-    vcs.stagedFiles.flatMap { stagedFiles =>
-      if (stagedFiles.nonEmpty)
-        vcs.commit(msg, sign, signOff) *>
-          assertCleanAfterCommit(vcs) *>
-          logInfo(ctx, s"Committed: $msg").as(ctx)
-      else
-        IO.pure(ctx)
-    }
 
   /** Reject the commit if any tracked file outside the configured per-project version files
     * is dirty. Catches hooks or sbt tasks that staged or modified unrelated files during the
@@ -96,7 +78,7 @@ private[monorepo] object MonorepoVersionCommitHelpers {
     required(ctx.vcs, "VCS not initialized") { vcs =>
       for {
         paths                        <- resolveRelativePaths(ctx, vcs)
-        versionFilePaths              = paths.map(_._2).distinct
+        versionFilePaths              = paths.distinct
         _                            <- assertOnlyVersionFilesDirty(versionFilePaths, vcs)
         settings                     <- IO.blocking {
                                           val extracted = SbtRuntime.extracted(ctx.state)
@@ -107,53 +89,37 @@ private[monorepo] object MonorepoVersionCommitHelpers {
                                           )
                                         }
         (sign, signOff, msgFormatter) = settings
-        result                       <- IO.uncancelable { _ =>
-                                          // Keep staging + commit atomic so cancellation cannot
-                                          // strand partially-prepared release-version commits.
-                                          (
-                                            if (versionFilePaths.isEmpty) IO.unit
-                                            else vcs.add(versionFilePaths*)
-                                          ) *>
-                                            {
-                                              val summary = versionSummary(ctx, selector)
-                                              commitIfChanged(
-                                                ctx,
-                                                vcs,
-                                                msgFormatter(summary),
-                                                sign,
-                                                signOff
-                                              )
-                                            }
-                                        }
+        msg                           = msgFormatter(versionSummary(ctx, selector))
+        commitResult                 <- VersionCommitSupport.stageAndCommitIfChangedAtomic(
+                                          vcs,
+                                          versionFilePaths,
+                                          msg,
+                                          sign,
+                                          signOff,
+                                          postCommitVerify = assertCleanAfterCommit(vcs)
+                                        )
+        result                       <-
+          if (commitResult.committed) logInfo(ctx, s"Committed: $msg").as(ctx)
+          else IO.pure(ctx)
         projectRefs                   = result.currentProjects.map(_.ref)
         hashSettings                 <-
           if (persistReleaseHash)
-            vcs.currentHash
-              .map(hash => ReleaseManifestMetadata.releaseManifestHashSettings(projectRefs, hash))
+            IO.pure(
+              ReleaseManifestMetadata.releaseManifestHashSettings(
+                projectRefs,
+                commitResult.hash
+              )
+            )
           else IO.pure(Seq.empty[Setting[?]])
-        finalResult                  <- IO.blocking {
-                                          // Lift any hook-installed late-bound monorepo
-                                          // version-file resolver triple into `session.rawAppend`
-                                          // BEFORE the trailing `appendSessionSettings` rebuilds
-                                          // the structure. A hook running between
-                                          // `set-release-versions` and `commit-release-versions`
-                                          // (e.g., `before-release-commit`) that installs the
-                                          // resolver via `Extracted.appendWithSession` would
-                                          // otherwise be dropped here, breaking the next-version
-                                          // write later in the release.
-                                          val lifted   =
-                                            MonorepoVersionFiles.liftLateBoundVersioningSettings(
-                                              result.state
-                                            )
-                                          val newState =
-                                            if (hashSettings.isEmpty) lifted
-                                            else
-                                              SbtRuntime.appendSessionSettings(
-                                                lifted,
+        finalResult                  <- IO.blocking(
+                                          result.withState(
+                                            MonorepoVersionFiles
+                                              .appendSessionSettingsPreservingVersioning(
+                                                result.state,
                                                 hashSettings
                                               )
-                                          result.withState(newState)
-                                        }
+                                          )
+                                        )
       } yield finalResult
     }
 }

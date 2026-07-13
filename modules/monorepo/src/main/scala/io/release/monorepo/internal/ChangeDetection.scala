@@ -48,8 +48,26 @@ private[monorepo] object ChangeDetection {
       tagDiffs: Map[String, Either[String, Seq[String]]],
       sharedChanged: Map[SharedPathCacheKey, Boolean]
   ) {
+    def getOrLoad(
+        tag: String,
+        loadDiff: String => IO[Either[String, Seq[String]]]
+    ): IO[(DiffCaches, Either[String, Seq[String]])] =
+      tagDiffs.get(tag) match {
+        case Some(result) => IO.pure(this -> result)
+        case None         =>
+          loadDiff(tag).map(result => copy(tagDiffs = tagDiffs.updated(tag, result)) -> result)
+      }
+
+    def sharedResult(key: SharedPathCacheKey): Option[Boolean] =
+      sharedChanged.get(key)
+
+    def withSharedResult(key: SharedPathCacheKey, changed: Boolean): DiffCaches =
+      copy(sharedChanged = sharedChanged.updated(key, changed))
+
+    def retainedDiffCount: Int = tagDiffs.size
+
     def evict(tag: String): DiffCaches =
-      DiffCaches(
+      copy(
         tagDiffs = tagDiffs - tag,
         sharedChanged = sharedChanged.filterNot { case (key, _) => key.tag == tag }
       )
@@ -99,17 +117,6 @@ private[monorepo] object ChangeDetection {
       )("git diff")
       .attempt
       .map(_.leftMap(errorMessage))
-
-  private def cachedDiffSinceTag(
-      tag: String,
-      cache: Map[String, Either[String, Seq[String]]],
-      loadDiff: String => IO[Either[String, Seq[String]]]
-  ): IO[(Map[String, Either[String, Seq[String]]], Either[String, Seq[String]])] =
-    cache.get(tag) match {
-      case Some(result) => IO.pure(cache -> result)
-      case None         =>
-        loadDiff(tag).map(result => cache.updated(tag, result) -> result)
-    }
 
   /** Look up the last tag matching a pattern via `git describe` / `git tag`. */
   private def lookupLastTag(vcs: Vcs, tagPattern: String): IO[TagLookupResult] = {
@@ -208,7 +215,7 @@ private[monorepo] object ChangeDetection {
                                 case (updatedCaches, changed) =>
                                   val retainedCaches = preparedProject.finalTagConsumer
                                     .fold(updatedCaches)(updatedCaches.evict)
-                                  inputs.observeRetainedDiffCount(retainedCaches.tagDiffs.size).as {
+                                  inputs.observeRetainedDiffCount(retainedCaches.retainedDiffCount).as {
                                     retainedCaches ->
                                       (if (changed) acc :+ preparedProject.project else acc)
                                   }
@@ -359,8 +366,8 @@ private[monorepo] object ChangeDetection {
     // Guard the probe itself: formatters that parse/normalize real semvers can throw on "*" (the
     // preflight warning tolerates this and defers the hard contract to here), so surface a thrown
     // formatter as the same friendly, setting-named error rather than a raw NumberFormatException.
-    scala.util.Try(inputs.tagNameFn(project.name, "*")) match {
-      case scala.util.Failure(err)                               =>
+    MonorepoTagSettings.probeWildcard(project.name, inputs.tagNameFn) match {
+      case MonorepoTagSettings.WildcardProbe.Rejected(err)      =>
         IO.raiseError(
           new IllegalStateException(
             s"releaseIOMonorepoVcsTagName for project '${project.name}' threw when probed with " +
@@ -370,7 +377,7 @@ private[monorepo] object ChangeDetection {
             err
           )
         )
-      case scala.util.Success(pattern) if !pattern.contains("*") =>
+      case MonorepoTagSettings.WildcardProbe.Dropped(pattern)   =>
         IO.raiseError(
           new IllegalStateException(
             s"releaseIOMonorepoVcsTagName for project '${project.name}' produced " +
@@ -379,7 +386,7 @@ private[monorepo] object ChangeDetection {
               "glob. Ensure the formatter interpolates both arguments."
           )
         )
-      case scala.util.Success(pattern)                           =>
+      case MonorepoTagSettings.WildcardProbe.Preserved(pattern) =>
         lookupLastTag(inputs.vcs, pattern).map(result => ProjectTagLookup(pattern, result))
     }
 
@@ -392,18 +399,14 @@ private[monorepo] object ChangeDetection {
     tagLookup match {
       case TagLookupResult.TagFound(tag) if inputs.sharedPaths.nonEmpty =>
         val cacheKey = SharedPathCacheKey(tag, excludes.toVector.sorted)
-        caches.sharedChanged.get(cacheKey) match {
+        caches.sharedResult(cacheKey) match {
           case Some(changed) => IO.pure(caches -> changed)
           case None          =>
-            cachedDiffSinceTag(tag, caches.tagDiffs, inputs.loadDiff).flatMap {
-              case (tagDiffs, diffResult) =>
-                checkSharedPaths(inputs.state, tag, inputs.sharedPaths, excludes, diffResult)
-                  .map { changed =>
-                    DiffCaches(
-                      tagDiffs,
-                      caches.sharedChanged.updated(cacheKey, changed)
-                    ) -> changed
-                  }
+            caches.getOrLoad(tag, inputs.loadDiff).flatMap { case (loadedCaches, diffResult) =>
+              checkSharedPaths(inputs.state, tag, inputs.sharedPaths, excludes, diffResult)
+                .map { changed =>
+                  loadedCaches.withSharedResult(cacheKey, changed) -> changed
+                }
             }
         }
       case _                                                            => IO.pure(caches -> false)
@@ -499,17 +502,16 @@ private[monorepo] object ChangeDetection {
               )
             }.as(caches -> true)
           case Right(baseRelative) =>
-            cachedDiffSinceTag(tag, caches.tagDiffs, loadDiff).flatMap {
-              case (tagDiffs, diffResult) =>
-                diffProjectSinceTag(
-                  project,
-                  tag,
-                  baseRelative,
-                  state,
-                  excludePaths,
-                  childDirPrefixes,
-                  diffResult
-                ).map(changed => caches.copy(tagDiffs = tagDiffs) -> changed)
+            caches.getOrLoad(tag, loadDiff).flatMap { case (loadedCaches, diffResult) =>
+              diffProjectSinceTag(
+                project,
+                tag,
+                baseRelative,
+                state,
+                excludePaths,
+                childDirPrefixes,
+                diffResult
+              ).map(changed => loadedCaches -> changed)
             }
         }
     }

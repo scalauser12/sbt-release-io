@@ -194,7 +194,7 @@ private[monorepo] object MonorepoVersionWorkflow {
 
   /** Run `body` against a transient sbt `State` that has a release version applied via
     * `appendWithSession` for every selected project. Used by validators (notably
-    * [[io.release.monorepo.internal.steps.MonorepoPublishSteps.shouldRunPublishHooks]] and
+    * [[io.release.monorepo.internal.steps.MonorepoPublishWorkflow.shouldRunPublishHooks]] and
     * [[io.release.monorepo.internal.steps.MonorepoPublishSteps.publishArtifacts]]) that
     * need to evaluate `publish / skip` and `publishTo` against the post-`set-release-
     * version` state — without leaking that state into the rest of the validate / execute
@@ -224,19 +224,6 @@ private[monorepo] object MonorepoVersionWorkflow {
       ctx: MonorepoContext
   )(body: State => IO[A]): IO[A] =
     withReleaseVersionOverlayUsing(ctx, SbtRuntime.appendWithSession)(body)
-
-  /** Sequential compatibility flows may execute a hook before publish
-    * validation consumes the release-version overlay. Preserve settings that
-    * the hook installed through `Extracted.appendWithSession`, while keeping
-    * the fresh release version last so overlay precedence remains unchanged.
-    */
-  def withReleaseVersionOverlayPreservingTransientSettings[A](
-      ctx: MonorepoContext
-  )(body: State => IO[A]): IO[A] =
-    withReleaseVersionOverlayUsing(
-      ctx,
-      SbtRuntime.appendTransientSettingsPreservingCurrent
-    )(body)
 
   private def withReleaseVersionOverlayUsing[A](
       ctx: MonorepoContext,
@@ -479,13 +466,12 @@ private[monorepo] object MonorepoVersionWorkflow {
       // resolver and writing to the wrong file. Hooks that already use
       // `ReleaseSessionOps.appendSessionSettings` see the lift as a true no-op
       // because their definitions already live in `session.mergeSettings`.
-      newState <- IO.blocking {
-                    val lifted = MonorepoVersionFiles.liftLateBoundVersioningSettings(ctx.state)
-                    SbtRuntime.appendSessionSettings(
-                      lifted,
+      newState <- IO.blocking(
+                    MonorepoVersionFiles.appendSessionSettingsPreservingVersioning(
+                      ctx.state,
                       Seq(project.ref / version := versionValue)
                     )
-                  }
+                  )
       updated   = ctx
                     .withState(newState)
                     .updateProject(project.ref)(_.copy(versionFile = versionFile))

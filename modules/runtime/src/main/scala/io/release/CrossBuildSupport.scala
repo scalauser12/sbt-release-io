@@ -172,9 +172,7 @@ private[release] object CrossBuildSupport {
     * appends the retained non-Scala transient suffix in its original order. This keeps
     * the structure compatible with later transient promotion while preserving settings
     * installed via prior `appendWithSession` calls. A subsequent plain
-    * `appendWithSession` still has sbt's normal replacement behavior; callers that must
-    * append another overlay without losing the current suffix use
-    * `SbtRuntime.appendTransientSettingsPreservingCurrent`.
+    * `appendWithSession` still has sbt's normal replacement behavior.
     *
     * Config-scoped overrides like `core / Test / scalaVersion := X` from `build.sbt`
     * (which live in `session.original`) are intentionally preserved across the switch:

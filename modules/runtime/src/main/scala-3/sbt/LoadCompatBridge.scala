@@ -345,48 +345,6 @@ object ReleaseIOLoadCompatBridge:
       expectedPrefix.length
     )
 
-  /** Append a structure-only overlay after the current transient suffix.
-    * Unlike `Extracted.appendWithSession`, this retains earlier structure-only
-    * definitions; unlike [[appendSessionSettings]], it leaves the session and
-    * `rawAppend` untouched. The new overlay is last so normal sbt
-    * last-definition-wins semantics apply.
-    */
-  def appendTransientSettingsPreservingCurrent(
-      state: State,
-      settings: Seq[Setting[?]]
-  ): State =
-    if settings.isEmpty then state
-    else
-      val extracted            = Project.extract(state)
-      import extracted.*
-      given Show[ScopedKey[?]] = extracted.showKey
-      val transformed          = transformSettings(extracted, settings)
-      if transformed.isEmpty then state
-      else
-        val retainedTransient = structurePartition(state, extracted).transient
-        val persistent        = session.mergeSettings
-        val expectedPrefix    =
-          _root_.sbt.internal.Load.finalTransforms(persistent)
-        val newStructure      = _root_.sbt.internal.Load.reapply(
-          persistent ++ retainedTransient ++ transformed,
-          structure
-        )
-        val guardIsValid      =
-          !hasTrustedSessionStructureGuard(session.rawAppend) ||
-            trustedSessionStructureGuardIsLive(newStructure)
-
-        if !hasExpectedPersistentPrefix(newStructure.settings, expectedPrefix) ||
-          !guardIsValid
-        then prefixInvariantFailure()
-
-        val newState = Project.setProject(session, newStructure, state)
-        markTrustedSessionStructure(
-          newState,
-          session,
-          newStructure,
-          expectedPrefix.length
-        )
-
   /** Strip every entry whose `AttributeKey` is in `keys` from
     * `session.rawAppend`, then reapply. Used to clear settings previously
     * installed via [[appendSessionSettings]] so they no longer reappear when

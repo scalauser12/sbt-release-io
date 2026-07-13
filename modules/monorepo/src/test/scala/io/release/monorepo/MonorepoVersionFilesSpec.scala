@@ -11,6 +11,9 @@ import java.io.File
 
 class MonorepoVersionFilesSpec extends CatsEffectSuite {
 
+  private def resolve(state: State, ref: ProjectRef): File =
+    MonorepoVersionFiles.resolve(MonorepoRuntime.fromState(state), ref)
+
   test("resolve - honor ThisBuild releaseIOVersioningFile when project scope is unset") {
     MonorepoSpecSupport
       .loadedFixtureResource("monorepo-version-files-thisbuild") { dir =>
@@ -32,7 +35,7 @@ class MonorepoVersionFilesSpec extends CatsEffectSuite {
       }
       .use { loaded =>
         IO {
-          val resolved = MonorepoVersionFiles.resolve(loaded.state, loaded.projectInfo("core").ref)
+          val resolved = resolve(loaded.state, loaded.projectInfo("core").ref)
           assertEquals(resolved, new File(loaded.dir, "root-version.sbt"))
           assertNotEquals(resolved, new File(new File(loaded.dir, "core"), "version.sbt"))
         }
@@ -77,7 +80,7 @@ class MonorepoVersionFilesSpec extends CatsEffectSuite {
       }
       .use { loaded =>
         IO {
-          val resolved = MonorepoVersionFiles.resolve(loaded.state, loaded.projectInfo("core").ref)
+          val resolved = resolve(loaded.state, loaded.projectInfo("core").ref)
           assertEquals(resolved, new File(new File(loaded.dir, "core"), "core-version.properties"))
           assertNotEquals(resolved, new File(loaded.dir, "root-version.sbt"))
         }
@@ -133,7 +136,7 @@ class MonorepoVersionFilesSpec extends CatsEffectSuite {
             relifted,
             Seq(settingKey[String]("force a later session rebuild") := "rebuilt")
           )
-          val resolved       = MonorepoVersionFiles.resolve(rebuilt, loaded.projectInfo("core").ref)
+          val resolved       = resolve(rebuilt, loaded.projectInfo("core").ref)
 
           assertEquals(resolved, new File(secondDirectory, "version.sbt"))
           assertEquals(Project.extract(rebuilt).getOpt(unrelated), None)
@@ -191,7 +194,7 @@ class MonorepoVersionFilesSpec extends CatsEffectSuite {
             Seq(settingKey[String]("force a shadowed-dependency rebuild") := "rebuilt")
           )
           val extracted                   = Project.extract(rebuilt)
-          val resolved                    = MonorepoVersionFiles.resolve(rebuilt, loaded.projectInfo("core").ref)
+          val resolved                    = resolve(rebuilt, loaded.projectInfo("core").ref)
 
           assertEquals(promotedResolverDefinitions, 1)
           assertEquals(resolved, new File(activeDirectory, "version.sbt"))
@@ -237,7 +240,7 @@ class MonorepoVersionFilesSpec extends CatsEffectSuite {
             Seq(settingKey[String]("force a delegated-base rebuild") := "rebuilt")
           )
           val extracted = Project.extract(rebuilt)
-          val resolved  = MonorepoVersionFiles.resolve(rebuilt, loaded.projectInfo("core").ref)
+          val resolved  = resolve(rebuilt, loaded.projectInfo("core").ref)
 
           assertEquals(extracted.get(rootRef / helperParts), Seq("delegated", "updated"))
           assertEquals(
@@ -278,7 +281,7 @@ class MonorepoVersionFilesSpec extends CatsEffectSuite {
           val after               = Project.extract(rebuilt)
           val lifted              = MonorepoVersionFiles.liftLateBoundVersioningSettings(rebuilt)
           val resolved            =
-            MonorepoVersionFiles.resolve(lifted, loaded.projectInfo("core").ref)
+            resolve(lifted, loaded.projectInfo("core").ref)
 
           assert(before.session eq after.session)
           assert(!(before.structure eq after.structure))
@@ -369,7 +372,7 @@ class MonorepoVersionFilesSpec extends CatsEffectSuite {
           )
           val replacedExtracted                                = Project.extract(replaced)
           val resolvedBeforeLift                               =
-            MonorepoVersionFiles.resolve(replaced, loaded.projectInfo("core").ref)
+            resolve(replaced, loaded.projectInfo("core").ref)
 
           assert(
             persistentExtracted.session eq replacedExtracted.session,
@@ -399,7 +402,7 @@ class MonorepoVersionFilesSpec extends CatsEffectSuite {
   }
 
   test(
-    "liftLateBoundVersioningSettings accepts a same-key appendWithSession override and guards once"
+    "empty persistent append lifts a same-key appendWithSession override and guards once"
   ) {
     MonorepoSpecSupport
       .loadedFixtureResource("monorepo-version-files-guarded-overlay") { dir =>
@@ -430,7 +433,8 @@ class MonorepoVersionFilesSpec extends CatsEffectSuite {
               }
             )
           )
-          val lifted                = MonorepoVersionFiles.liftLateBoundVersioningSettings(transient)
+          val lifted                = MonorepoVersionFiles
+            .appendSessionSettingsPreservingVersioning(transient, Seq.empty)
           val liftedAgain           = MonorepoVersionFiles.liftLateBoundVersioningSettings(lifted)
           val rawAppendAfterLift    = Project.extract(lifted).session.rawAppend.length
           val rebuilt               = SbtRuntime.appendSessionSettings(
@@ -439,7 +443,7 @@ class MonorepoVersionFilesSpec extends CatsEffectSuite {
           )
           val rawAppendAfterRebuild = Project.extract(rebuilt).session.rawAppend.length
           val resolved              =
-            MonorepoVersionFiles.resolve(rebuilt, loaded.projectInfo("core").ref)
+            resolve(rebuilt, loaded.projectInfo("core").ref)
 
           assert(liftedAgain eq lifted, "trusted lift must return the identical State")
           assertEquals(rawAppendAfterRebuild, rawAppendAfterLift + 1)
@@ -448,7 +452,7 @@ class MonorepoVersionFilesSpec extends CatsEffectSuite {
       }
   }
 
-  test("liftLateBoundVersioningSettings leaves an unguarded no-op state reference-identical") {
+  test("empty persistent append leaves an unguarded no-op state reference-identical") {
     MonorepoSpecSupport
       .loadedFixtureResource("monorepo-version-files-unguarded-no-op") { dir =>
         val coreBase = new File(dir, "core")
@@ -460,7 +464,8 @@ class MonorepoVersionFilesSpec extends CatsEffectSuite {
       }
       .use { loaded =>
         IO.blocking {
-          val lifted = MonorepoVersionFiles.liftLateBoundVersioningSettings(loaded.state)
+          val lifted = MonorepoVersionFiles
+            .appendSessionSettingsPreservingVersioning(loaded.state, Seq.empty)
           assert(lifted eq loaded.state)
         }
       }

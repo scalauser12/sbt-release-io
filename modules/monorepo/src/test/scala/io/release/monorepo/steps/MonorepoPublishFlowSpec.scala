@@ -3,7 +3,6 @@ package io.release.monorepo.internal.steps
 import io.release.ReleaseSharedKeys
 import io.release.TestAssertions.assertFailure
 import io.release.monorepo.MonorepoSpecSupport
-import io.release.monorepo.internal.MonorepoComposer
 import io.release.monorepo.internal.steps.*
 import io.release.runtime.sbt.SbtCompat
 import munit.CatsEffectSuite
@@ -27,7 +26,7 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
       val project = fixture.projectInfo("core")
 
       assertFailure[IllegalStateException, Unit](
-        MonorepoPublishSteps.checkSnapshotDependencies.validate(ctx, project).void
+        MonorepoVerificationSteps.checkSnapshotDependencies.validate(ctx, project).void
       ) { err =>
         assert(err.getMessage.contains("Snapshot dependencies found in core"))
         assert(err.getMessage.contains("org.example:dep:1.0.0-SNAPSHOT"))
@@ -45,7 +44,7 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
     }.use { fixture =>
       val ctx      = fixture.context(Seq("core"))
       val project  = fixture.projectInfo("core")
-      val validate = MonorepoPublishSteps.checkSnapshotDependencies.validate
+      val validate = MonorepoVerificationSteps.checkSnapshotDependencies.validate
 
       assertFailure[IllegalStateException, Unit](validate(ctx, project).void) { err =>
         assert(err.getMessage.contains("Snapshot dependencies found in core"))
@@ -67,7 +66,7 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
       val marker  = new java.io.File(fixture.dir, "core/snapshot-deps-ran.txt")
 
       assertFailure[IllegalStateException, Unit](
-        MonorepoPublishSteps.checkSnapshotDependencies.validate(ctx, project).void
+        MonorepoVerificationSteps.checkSnapshotDependencies.validate(ctx, project).void
       ) { err =>
         assert(marker.exists())
         assert(err.getMessage.contains("core"))
@@ -109,7 +108,7 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
         val ctx     = fixture.context(Seq("core"))
         val project = fixture.projectInfo("core")
 
-        MonorepoPublishSteps.checkSnapshotDependencies.validate(ctx, project).map { result =>
+        MonorepoVerificationSteps.checkSnapshotDependencies.validate(ctx, project).map { result =>
           assertEquals(result.failed, false)
           assert(new File(fixture.dir, "core/managed-classpath-ran.txt").exists())
         }
@@ -152,7 +151,7 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
         val project = fixture.projectInfo("core")
 
         assertFailure[IllegalStateException, Unit](
-          MonorepoPublishSteps.checkSnapshotDependencies.validate(ctx, project).void
+          MonorepoVerificationSteps.checkSnapshotDependencies.validate(ctx, project).void
         ) { err =>
           assert(err.getMessage.contains("FailureCommand"))
           assert(err.getMessage.contains(Keys.managedClasspath.key.label))
@@ -171,7 +170,7 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
       val ctx     = fixture.context(Seq("core"), skipTests = true)
       val project = fixture.projectInfo("core")
 
-      MonorepoPublishSteps.runTests.execute(ctx, project).map { result =>
+      MonorepoVerificationSteps.runTests.execute(ctx, project).map { result =>
         assertEquals(result.skipTests, true)
         assert(!new java.io.File(fixture.dir, "core/test-ran.txt").exists())
       }
@@ -189,7 +188,7 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
       val ctx     = fixture.context(Seq("core"))
       val project = fixture.projectInfo("core")
 
-      MonorepoPublishSteps.runTests.execute(ctx, project).map { _ =>
+      MonorepoVerificationSteps.runTests.execute(ctx, project).map { _ =>
         assert(new java.io.File(fixture.dir, "core/test-ran.txt").exists())
       }
     }
@@ -205,7 +204,7 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
       val ctx     = fixture.context(Seq("core"))
       val project = fixture.projectInfo("core")
 
-      MonorepoPublishSteps.checkSnapshotDependencies.validate(ctx, project).void
+      MonorepoVerificationSteps.checkSnapshotDependencies.validate(ctx, project).void
     }
   }
 
@@ -214,7 +213,7 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
       val ctx     = fixture.context(Seq("core"))
       val project = fixture.projectInfo("core")
 
-      MonorepoPublishSteps.checkSnapshotDependencies.execute(ctx, project).map { result =>
+      MonorepoVerificationSteps.checkSnapshotDependencies.execute(ctx, project).map { result =>
         assert(result eq ctx)
       }
     }
@@ -222,13 +221,12 @@ class MonorepoPublishFlowSpec extends CatsEffectSuite with MonorepoPublishStepsS
 
   test("runClean.execute - succeed when clean reports no failure") {
     singleProjectFixtureResource("monorepo-publish-clean-ok")().use { fixture =>
-      val ctx = fixture.context(Seq("core"))
+      val ctx     = fixture.context(Seq("core"))
+      val project = fixture.projectInfo("core")
 
-      MonorepoComposer
-        .compose(Seq(MonorepoPublishSteps.runClean))(ctx)
-        .map { result =>
-          assert(!result.failed)
-        }
+      MonorepoVerificationSteps.runClean.execute(ctx, project).map { result =>
+        assert(!result.failed)
+      }
     }
   }
 }

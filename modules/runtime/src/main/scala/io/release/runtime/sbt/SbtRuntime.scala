@@ -113,17 +113,6 @@ private[release] object SbtRuntime {
       transientStrip
     )
 
-  /** Append a transient overlay after the current structure-only suffix while
-    * keeping `session.rawAppend` unchanged. This preserves hook-installed
-    * transient definitions and gives the new overlay normal last-write
-    * precedence.
-    */
-  def appendTransientSettingsPreservingCurrent(
-      state: State,
-      settings: Seq[Setting[?]]
-  ): State =
-    sbt.ReleaseIOLoadCompatBridge.appendTransientSettingsPreservingCurrent(state, settings)
-
   /** Strip every entry whose `AttributeKey` is in `keys` from
     * `session.rawAppend`, then reapply the resulting structure.
     *
