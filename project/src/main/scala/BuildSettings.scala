@@ -1,6 +1,3 @@
-import java.io.FileInputStream
-import java.util.Properties
-
 import sbt._
 import sbt.IO
 import sbt.Keys._
@@ -12,19 +9,7 @@ object BuildVersions {
   def readVersionFile(path: String): String =
     IO.read(file(path)).trim
 
-  def readSbt1Version(path: String): String = {
-    val properties = new Properties()
-    val input      = new FileInputStream(file(path))
-    try properties.load(input)
-    finally input.close()
-
-    Option(properties.getProperty("sbt.version"))
-      .map(_.trim)
-      .filter(_.nonEmpty)
-      .getOrElse(sys.error(s"Missing sbt.version entry in $path"))
-  }
-
-  val sbt1Version             = readSbt1Version("project/build.properties")
+  val sbt1Version             = readVersionFile("project/sbt1.version")
   val sbt2Version             = readVersionFile("project/sbt2.version")
   val scala212                = "2.12.21"
   val scala3                  = "3.8.4"

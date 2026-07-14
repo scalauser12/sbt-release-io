@@ -5,7 +5,7 @@ import sbt.{Def, Setting, State, TaskKey, *}
 import java.io.File
 import _root_.io.release.runtime.sbt.SbtCompat
 
-private[release] object ReleaseStepIOCrossBuildCompat {
+private[release] object ReleaseStepIOCrossBuildCompat:
 
   def failureCommandTaskSetting(task: TaskKey[Unit], marker: File): Setting[?] =
     task := Def
@@ -18,4 +18,3 @@ private[release] object ReleaseStepIOCrossBuildCompat {
         )
       }
       .value
-}

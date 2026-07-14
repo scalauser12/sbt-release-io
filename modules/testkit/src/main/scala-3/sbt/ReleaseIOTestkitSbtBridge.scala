@@ -15,15 +15,15 @@ object ReleaseIOTestkitSbtBridge:
     * the full contract.
     */
   def appendSessionSettings(state: State, settings: Seq[Setting[?]]): State =
-    val extracted = Project.extract(state)
+    val extracted                = Project.extract(state)
     import extracted.*
     given Show[Def.ScopedKey[?]] = extracted.showKey
-    val transformed = _root_.sbt.internal.Load.transformSettings(
+    val transformed              = _root_.sbt.internal.Load.transformSettings(
       _root_.sbt.internal.Load.projectScope(extracted.currentRef),
       extracted.currentRef.build,
       extracted.rootProject,
       settings
     )
-    val newSession   = session.appendRaw(transformed)
-    val newStructure = _root_.sbt.internal.Load.reapply(newSession.mergeSettings, structure)
+    val newSession               = session.appendRaw(transformed)
+    val newStructure             = _root_.sbt.internal.Load.reapply(newSession.mergeSettings, structure)
     Project.setProject(newSession, newStructure, state)

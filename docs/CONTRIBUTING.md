@@ -9,19 +9,22 @@ The plugin cross-builds against sbt 1 (Scala 2.12) and sbt 2 (Scala 3). Code
 that touches runtime behavior, command execution, or the release flow must
 verify on both lanes.
 
-### sbt 1 (Scala 2.12, default)
+### sbt 1 (Scala 2.12 compatibility lane)
 
 ```bash
-sbt compile              # compile all modules
-sbt test                 # run unit tests (MUnit)
-sbt core/test            # core unit tests only
-sbt monorepo/test        # monorepo unit tests only
-sbt scripted             # run every scripted integration test
-sbt "core/scripted sbt-release-io/<test-name>"          # one core scripted test
-sbt "monorepo/scripted sbt-release-io-monorepo/<test-name>"  # one monorepo scripted test
+sbt --server --sbt-version 1.12.3 compile              # compile all modules
+sbt --server --sbt-version 1.12.3 test                 # run unit tests (MUnit)
+sbt --server --sbt-version 1.12.3 core/test            # core unit tests only
+sbt --server --sbt-version 1.12.3 monorepo/test        # monorepo unit tests only
+sbt --server --sbt-version 1.12.3 scripted             # run every scripted integration test
+sbt --server --sbt-version 1.12.3 "core/scripted sbt-release-io/<test-name>"
+sbt --server --sbt-version 1.12.3 "monorepo/scripted sbt-release-io-monorepo/<test-name>"
 ```
 
-### sbt 2 (Scala 3)
+Use both runner options so the sbt 1 override wins even though `project/build.properties`
+selects sbt 2 and enables its native client by default.
+
+### sbt 2 (Scala 3, default)
 
 Prefer the helper script for local checkouts so generated IDE files
 (`project/metals.sbt`, `.bloop/`) don't interfere:
@@ -33,7 +36,8 @@ Prefer the helper script for local checkouts so generated IDE files
 ./bin/sbt2-clean monorepo/scripted
 ```
 
-Plain `sbt -Dsbt.version=2.0.0 ...` works from a clean checkout / CI.
+Plain `sbt ...` uses sbt 2.0.0 from `project/build.properties`. The explicit
+`sbt --server --sbt-version 2.0.0 ...` form works from a clean checkout / CI.
 
 ## Formatting
 
@@ -65,8 +69,8 @@ tests verify code; scripted tests verify behavior.
 
 Branch off `main`. Before opening a PR, run:
 
-1. `sbt scalafmtCheckAll scalafmtSbtCheck`
-2. `sbt test` and `./bin/sbt2-clean test`
+1. `sbt "scalafmtCheckAll; scalafmtSbtCheck"`
+2. `sbt --server --sbt-version 1.12.3 test` and `./bin/sbt2-clean test`
 3. Targeted scripted tests for the area you touched (full `scripted` is
    slow — let CI cover the long pole).
 

@@ -5,16 +5,16 @@ See the root `CLAUDE.md` for full project documentation, conventions, and archit
 ## Quick Reference
 
 ```bash
-sbt compile                # compile all modules
-sbt test                   # run all unit tests
-sbt scripted               # run all scripted integration tests
+./bin/sbt2-clean compile        # compile all modules on the default sbt 2 lane
+./bin/sbt2-clean test           # run all unit tests
+./bin/sbt2-clean scripted       # run all scripted integration tests
 sbt scalafmtAll            # format sources
 sbt scalafmtCheckAll       # check formatting
 ```
 
-### Cross-build (sbt 2)
+### Compatibility lane (sbt 1)
 
 ```bash
-sbt -Dsbt.version=2.0.0 compile
-sbt -Dsbt.version=2.0.0 test
+sbt --server --sbt-version 1.12.3 compile
+sbt --server --sbt-version 1.12.3 test
 ```

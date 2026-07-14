@@ -6,7 +6,7 @@ import xsbti.HashedVirtualFileRef
 
 import java.io.File
 
-private[release] object SnapshotDependencyTasksTestCompat {
+private[release] object SnapshotDependencyTasksTestCompat:
 
   def managedClasspathSetting(marker: File, dependencies: Seq[ModuleID]): Setting[?] =
     Test / Keys.managedClasspath := {
@@ -24,4 +24,3 @@ private[release] object SnapshotDependencyTasksTestCompat {
         }
       }
     }
-}

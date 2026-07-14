@@ -38,6 +38,7 @@ if [[ ${#args[@]} -eq 1 && "${args[0]}" == "test" ]]; then
   args=("testkit/test" "core/test" "monorepo/test")
 fi
 
+# Keep the temporary checkout on a foreground JVM and make the version-file pin authoritative.
 exec env \
   SBT_OPTS="${SBT_OPTS:-} -Dsbt.global.base=$tmp_dir/.sbt-global" \
-  sbt -Dsbt.version="$sbt2_version" "${args[@]}"
+  sbt --server --sbt-version "$sbt2_version" "${args[@]}"

@@ -110,16 +110,16 @@ For local rehearsal recipes, see [docs/core/recipes.md](docs/core/recipes.md) an
 ## Build & Test
 
 ```bash
-# sbt 1
-sbt compile              # compile all modules
-sbt test                 # run all unit tests (MUnit)
-sbt core/test            # core unit tests only
-sbt monorepo/test        # monorepo unit tests only
-sbt scripted             # run all scripted integration tests
+# sbt 1 / Scala 2.12 compatibility lane (version pinned in project/sbt1.version)
+sbt --server --sbt-version 1.12.3 compile
+sbt --server --sbt-version 1.12.3 test
+sbt --server --sbt-version 1.12.3 core/test
+sbt --server --sbt-version 1.12.3 monorepo/test
+sbt --server --sbt-version 1.12.3 scripted
 
-# sbt 2 / Scala 3 (version pinned in project/sbt2.version)
-sbt -Dsbt.version=2.0.0 compile  # compile on sbt 2
-sbt -Dsbt.version=2.0.0 test     # run unit tests on sbt 2
+# sbt 2 / Scala 3 default lane (pinned in project/build.properties and project/sbt2.version)
+sbt --server --sbt-version 2.0.0 compile  # direct sbt 2 lane
+sbt --server --sbt-version 2.0.0 test
 ./bin/sbt2-clean test                # same sbt 2 test lane from a clean checkout of tracked files
 ./bin/sbt2-clean core/scripted       # core scripted tests on sbt 2
 ./bin/sbt2-clean monorepo/scripted   # monorepo scripted tests on sbt 2
@@ -131,9 +131,12 @@ sbt scalafmtCheckAll     # verify Scala source formatting
 sbt scalafmtSbtCheck     # verify sbt/build file formatting
 ```
 
-Use `./bin/sbt2-clean ...` for local sbt 2 verification when your checkout has generated IDE
-files such as `project/metals.sbt` or `.bloop/` — those can interfere with sbt 2 compilation.
-CI runs on a clean checkout and uses plain `sbt -Dsbt.version=2.0.0 ...`.
+The explicit compatibility commands use `--server --sbt-version` so the sbt 1 override wins
+even though `project/build.properties` selects sbt 2 and enables its native client by default.
+Plain `sbt ...` uses sbt 2.0.0 from `project/build.properties`. Prefer
+`./bin/sbt2-clean ...` for local sbt 2 verification when your checkout has generated IDE files
+such as `project/metals.sbt` or `.bloop/` — those can interfere with sbt 2 compilation. CI runs
+on a clean checkout and uses the explicitly pinned sbt version for each lane.
 
 ## Compatibility
 

@@ -8,33 +8,32 @@ the published core artifact.
 ## Build & Test
 
 ```bash
-sbt compile                # compile all modules
-sbt test                   # run all unit tests (MUnit)
-sbt core/test              # core unit tests only
-sbt monorepo/test          # monorepo unit tests only
-sbt scripted               # run all scripted integration tests
-sbt core/scripted          # core scripted tests only
-sbt monorepo/scripted      # monorepo scripted tests only
+./bin/sbt2-clean compile              # compile all modules on the default sbt 2 lane
+./bin/sbt2-clean test                 # run all unit tests (MUnit)
+./bin/sbt2-clean core/test            # core unit tests only
+./bin/sbt2-clean monorepo/test        # monorepo unit tests only
+./bin/sbt2-clean scripted             # run all scripted integration tests
+./bin/sbt2-clean core/scripted        # core scripted tests only
+./bin/sbt2-clean monorepo/scripted    # monorepo scripted tests only
 ```
 
-### Cross-build (sbt 2)
+### Compatibility lane (sbt 1)
 
 ```bash
-./bin/sbt2-clean compile
-./bin/sbt2-clean test
-sbt -Dsbt.version=2.0.0 test
+sbt --server --sbt-version 1.12.3 compile
+sbt --server --sbt-version 1.12.3 test
 ```
 
 **Note:** Prefer `./bin/sbt2-clean ...` for local sbt 2 work. It runs from a clean tracked
 snapshot, which avoids interference from IDE-generated files such as `project/metals.sbt`
-or `.bloop/`. Use plain `sbt -Dsbt.version=2.0.0 ...` only when you explicitly need
-the direct lane or you are working from a known-clean checkout/CI environment.
+or `.bloop/`. Plain `sbt ...` uses sbt 2.0.0 from `project/build.properties`; use the direct
+lane only when needed or from a known-clean checkout/CI environment.
 
 ### Verification Expectations
 
 - If a change affects runtime behavior, command execution, release flow, or source compatibility,
   verify it on both supported sbt lines:
-  - sbt 1: `sbt -Dsbt.version=1.12.3 ...`
+  - sbt 1: `sbt --server --sbt-version 1.12.3 ...`
   - sbt 2: `./bin/sbt2-clean ...`
 - If you touch version-specific test compat or source-split code, inspect and update both
   `scala-2` and `scala-3` source roots when applicable.
