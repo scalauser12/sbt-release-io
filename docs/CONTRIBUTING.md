@@ -7,7 +7,8 @@ command flows through the runtime before changing core or monorepo internals.
 
 The plugin cross-builds against sbt 1 (Scala 2.12) and sbt 2 (Scala 3). Code
 that touches runtime behavior, command execution, or the release flow must
-verify on both lanes.
+verify on both lanes. Use JDK 17 or newer because the default sbt 2 launcher
+requires it.
 
 ### sbt 1 (Scala 2.12 compatibility lane)
 

@@ -109,6 +109,8 @@ For local rehearsal recipes, see [docs/core/recipes.md](docs/core/recipes.md) an
 
 ## Build & Test
 
+Building this repository requires JDK 17 or newer because sbt 2 is the default launcher.
+
 ```bash
 # sbt 1 / Scala 2.12 compatibility lane (version pinned in project/sbt1.version)
 sbt --server --sbt-version 1.12.3 compile
