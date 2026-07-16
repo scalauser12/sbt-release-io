@@ -21,6 +21,7 @@ import munit.CatsEffectSuite
 
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 class MonorepoVersionStepsSpec extends CatsEffectSuite {
 
@@ -1000,6 +1001,60 @@ class MonorepoVersionStepsSpec extends CatsEffectSuite {
       MonorepoVersionSteps.setNextVersions.execute(ctx, project) *> IO.blocking {
         val contents = sbt.IO.read(fixture.versionFile)
         assertEquals(contents, """version := "1.1.0-SNAPSHOT"""" + "\n")
+      }
+    }
+  }
+
+  test(
+    "setNextVersions.execute - reject a late-bound missing version file without creating it"
+  ) {
+    fixtureResource.use { fixture =>
+      val missingVersionFile = new File(fixture.loaded.dir, "core/next-version.sbt")
+      val renderCalls        = new AtomicInteger(0)
+      val initialCtx         = fixture.context(
+        Seq("core"),
+        versionsById = Map("core" -> ("1.0.0" -> "1.1.0-SNAPSHOT"))
+      )
+      val initialProject     = MonorepoSpecSupport.projectNamed(initialCtx.projects, "core")
+
+      MonorepoVersionSteps.setNextVersions.validate(initialCtx, initialProject).flatMap {
+        validatedCtx =>
+          val mutatedState = SbtRuntime.appendWithSession(
+            validatedCtx.state,
+            Seq(
+              MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningFile         := {
+                (_: sbt.ProjectRef, _: sbt.State) => missingVersionFile
+              },
+              MonorepoReleasePlugin.autoImport.releaseIOMonorepoVersioningFileContents := {
+                (_: File, version: String) =>
+                  IO {
+                    renderCalls.incrementAndGet()
+                    s"""version := "$version"""" + "\n"
+                  }
+              }
+            )
+          )
+          val ctx          = validatedCtx.withState(mutatedState)
+          val project      = MonorepoSpecSupport.projectNamed(ctx.projects, "core")
+
+          assertFailure[IllegalStateException, MonorepoContext](
+            MonorepoVersionSteps.setNextVersions.execute(ctx, project)
+          ) { err =>
+            assert(err.getMessage.contains("Version file not found for core"))
+            assert(err.getMessage.contains(missingVersionFile.getPath))
+          } *> IO.blocking {
+            assert(!missingVersionFile.exists(), "the missing late-bound file must not be created")
+            assertEquals(
+              renderCalls.get(),
+              0,
+              "the writer must not render contents for a missing file"
+            )
+            assertEquals(
+              sbt.IO.read(fixture.versionFile),
+              """version := "0.1.0-SNAPSHOT"""" + "\n",
+              "the original version file must remain unchanged"
+            )
+          }
       }
     }
   }
