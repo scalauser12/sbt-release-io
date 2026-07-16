@@ -3,7 +3,9 @@ package io.release.core.internal
 import cats.effect.IO
 import io.release.ReleaseComposer
 import io.release.ReleaseContext
+import io.release.VcsOps
 import io.release.core.internal.CoreStepAliases.Step
+import io.release.core.internal.steps.ReleaseVersionWorkflow
 import io.release.core.internal.steps.TagSteps
 import io.release.core.internal.steps.VersionSteps
 import io.release.runtime.HookPhases
@@ -14,6 +16,7 @@ import io.release.runtime.engine.ExecutionEngine
 import io.release.runtime.engine.StepOrdering
 import io.release.runtime.preflight.PreflightPhaseGroups
 import io.release.runtime.preflight.PreflightRendering
+import io.release.runtime.workflow.VersionCommitSupport
 import io.release.runtime.workflow.VersionWorkflow
 
 import java.io.File
@@ -314,26 +317,31 @@ private[release] object CorePreflight {
   ): IO[TagSteps.PreflightTagOutcome] =
     PreflightPhaseGroups.dispatchPreflightTag(
       checkSteps.builtInTagPreflightIncludesReleaseWriteAndCommit,
-      builtInReleaseWriteWouldChange(ctx),
+      builtInReleaseCommitNeeded(ctx),
       _.fold(TagSteps.preflightTag(ctx, tagPreflightInteractive))(callback =>
         TagSteps.preflightTag(ctx, tagPreflightInteractive, callback)
       )
     )
 
-  private[release] def builtInReleaseWriteWouldChange(ctx: ReleaseContext): IO[Boolean] =
+  private[release] def builtInReleaseCommitNeeded(ctx: ReleaseContext): IO[Boolean] =
     IO.fromOption(ctx.releaseVersion)(
       new IllegalStateException(
-        "Internal invariant violated: built-in preflight release-write probe ran without a " +
+        "Internal invariant violated: built-in preflight release-commit probe ran without a " +
           "resolved release version; this branch should only execute when versionsResolved=true."
       )
     ).flatMap { releaseVersion =>
-      IO.blocking(VersionSteps.resolveVersionPlan(ctx)).flatMap { versionPlan =>
-        VersionWorkflow.wouldChangeVersionFile(
-          versionPlan.versionFile,
-          releaseVersion,
-          versionPlan.versionFileContents
-        )
-      }
+      for {
+        versionPlan      <- IO.blocking(VersionSteps.resolveVersionPlan(ctx))
+        _                <- ReleaseVersionWorkflow.ensureVersionFileExists(versionPlan.versionFile)
+        vcs              <- VcsOps.resolveVcs(ctx)
+        relativePath     <- VcsOps.relativizeToBase(vcs, versionPlan.versionFile)
+        writeWouldChange <- VersionWorkflow.wouldChangeVersionFile(
+                              versionPlan.versionFile,
+                              releaseVersion,
+                              versionPlan.versionFileContents
+                            )
+        status           <- VersionCommitSupport.versionFileStatus(relativePath, vcs)
+      } yield status.commitNeeded(writeWouldChange)
     }
 
   private def renderVersions(versions: Evaluation[VersionsValue]): List[String] =

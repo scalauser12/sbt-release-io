@@ -8,12 +8,15 @@ import io.release.ReleasePluginIO
 import io.release.ReleaseTestSupport
 import io.release.TestAssertions.assertFailure
 import io.release.TestSupport
+import io.release.core.internal.CorePublishState.PublishTargetProgress
 import io.release.runtime.ReleaseLogPrefixes
+import io.release.runtime.sbt.SbtRuntime
 import munit.CatsEffectSuite
 import sbt.*
 import sbt.Keys.*
 
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 class PublishStepsSpec extends CatsEffectSuite {
   private val fixturePrefix                = "publish-steps-spec"
@@ -28,21 +31,26 @@ class PublishStepsSpec extends CatsEffectSuite {
   ) {
     loadedContextResource(s"$fixturePrefix-publish") { dir =>
       val marker = new File(dir, "publish-ran.txt")
-      marker -> Seq(CoreStepTestCompat.failureCommandPublishTaskSetting(marker))
+      marker -> Seq(
+        version := "1.0.0",
+        CoreStepTestCompat.failureCommandPublishTaskSetting(marker)
+      )
     }.use { case (ctx, marker) =>
-      PublishSteps.publishArtifacts.execute(ctx).map { result =>
-        assert(result.failed)
-        assert(marker.exists())
-        assertEquals(result.state.remainingCommands, Nil)
-        assert(
-          result.failureCause.exists(
-            _.getMessage.contains(
-              "publish-artifacts: sbt task " +
-                s"'${ReleasePluginIO.autoImport.releaseIOPublishAction.key.label}'"
+      PublishSteps.publishArtifacts
+        .execute(ctx.withVersions("1.0.0", "1.0.0"))
+        .map { result =>
+          assert(result.failed)
+          assert(marker.exists())
+          assertEquals(result.state.remainingCommands, Nil)
+          assert(
+            result.failureCause.exists(
+              _.getMessage.contains(
+                "publish-artifacts: sbt task " +
+                  s"'${ReleasePluginIO.autoImport.releaseIOPublishAction.key.label}'"
+              )
             )
           )
-        )
-      }
+        }
     }
   }
 
@@ -193,6 +201,57 @@ class PublishStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test(
+    "publishArtifacts.execute - exclude a checked skipped custom target even when its " +
+      "skip task re-enables itself"
+  ) {
+    preparedMultiProjectContextResource(s"$fixturePrefix-selected-custom-targets") { dir =>
+      val probes    = new File(dir, "root-skip-probes")
+      val childRuns = new AtomicInteger(0)
+      (
+        (probes, childRuns),
+        versionOverlaySettings(useGlobal = false) ++ Seq(
+          version                                                            := "0.1.0-SNAPSHOT",
+          ReleasePluginIO.autoImport.releaseIOPublishChecks                  := true,
+          ReleasePluginIO.autoImport.releaseIOPublishAction / Keys.aggregate := true,
+          CoreStepTestCompat.publishSkipWithSelfReenable(probes),
+          CoreStepTestCompat.failureCommandPublishTaskSetting(
+            new File(dir, "root-published")
+          )
+        ),
+        Seq(
+          version                                           := "1.0.0",
+          publish / skip                                    := false,
+          publishTo                                         := Some(
+            Resolver.file("local", new File(dir, "child-repo"))
+          ),
+          ReleasePluginIO.autoImport.releaseIOPublishAction := {
+            childRuns.incrementAndGet()
+            ()
+          }
+        )
+      )
+    }.use { case (ctx, (probes, childRuns)) =>
+      val base = SbtRuntime.extracted(ctx.state).get(baseDirectory)
+      for {
+        validated <- PublishSteps.publishArtifacts.validate(
+                       ctx.withVersions("1.0.0", "1.1.0-SNAPSHOT")
+                     )
+        result    <- PublishSteps.publishArtifacts.execute(validated)
+        probeRuns <- IO.blocking(sbt.IO.readLines(probes).count(_.nonEmpty))
+      } yield {
+        assert(!result.failed)
+        assertEquals(probeRuns, 2)
+        assert(!(base / "root-published").exists())
+        assertEquals(childRuns.get(), 1)
+        assertEquals(
+          result.publishExecutedKeys,
+          Some(Set(PublishSteps.publishGateKey(result)))
+        )
+      }
+    }
+  }
+
   // ── publishArtifacts.validate ───────────────────────────────────────
 
   test("checkSnapshotDependencies.validate - fail on snapshot dependencies") {
@@ -268,11 +327,332 @@ class PublishStepsSpec extends CatsEffectSuite {
     }
   }
 
-  test("publishArtifacts.validate - short-circuit when publishArtifactsChecks is false") {
-    loadedContextResource(s"$fixturePrefix-val-off") { _ =>
-      () -> Seq(ReleasePluginIO.autoImport.releaseIOPublishChecks := false)
+  test("publishArtifacts.validate - checks disabled do not evaluate publish / skip") {
+    loadedContextResource(s"$fixturePrefix-val-off") { dir =>
+      val probes = new File(dir, "skip-probes")
+      probes -> Seq(
+        ReleasePluginIO.autoImport.releaseIOPublishChecks := false,
+        CoreStepTestCompat.failureCommandPublishSkipSetting(probes)
+      )
+    }.use { case (ctx, probes) =>
+      PublishSteps.publishArtifacts.validate(ctx).map { validated =>
+        val key = PublishSteps.publishGateKey(validated)
+        assert(!probes.exists())
+        assert(!SbtRuntime.hasFailureCommand(validated.state))
+        assert(
+          validated.publishValidationBatch(key).exists { batch =>
+            !batch.checksEnabled && batch.decisions.isEmpty &&
+            batch.targetProgress == PublishTargetProgress.NotRequired
+          }
+        )
+      }
+    }
+  }
+
+  test("publishArtifacts - checks disabled evaluate live skip only during execute") {
+    loadedContextResource(s"$fixturePrefix-val-off-live-skip") { dir =>
+      val probes    = new File(dir, "skip-probes")
+      val published = new File(dir, "published")
+      (probes, published) -> Seq(
+        version                                           := "1.0.0",
+        ReleasePluginIO.autoImport.releaseIOPublishChecks := false,
+        CoreStepTestCompat.publishSkipWithTargetStateMutation(
+          probes,
+          target = None,
+          skipped = true
+        ),
+        ReleasePluginIO.autoImport.releaseIOPublishAction := sbt.IO.touch(published)
+      )
+    }.use { case (ctx, (probes, published)) =>
+      for {
+        validated <- PublishSteps.publishArtifacts.validate(ctx)
+        _          = assert(!probes.exists())
+        result    <- PublishSteps.publishArtifacts.execute(
+                       validated.withVersions("1.0.0", "1.1.0-SNAPSHOT")
+                     )
+        probeRuns <- IO.blocking(sbt.IO.readLines(probes).count(_.nonEmpty))
+      } yield {
+        assert(!result.failed)
+        assertEquals(probeRuns, 1)
+        assert(!published.exists())
+        assertEquals(result.publishExecutedKeys, Some(Set.empty[String]))
+      }
+    }
+  }
+
+  test("publishArtifacts.execute - selected action observes publish skip returned State") {
+    loadedContextResource(s"$fixturePrefix-execute-post-skip-state") { dir =>
+      val probes    = new File(dir, "skip-probes")
+      val published = new File(dir, "published")
+      val target    = Resolver.file("local", new File(dir, "repo"))
+      (probes, published) -> Seq(
+        version                                           := "1.0.0",
+        ReleasePluginIO.autoImport.releaseIOPublishChecks := false,
+        publishTo                                         := None,
+        CoreStepTestCompat.publishSkipWithTargetStateMutation(
+          probes,
+          target = Some(target),
+          skipped = false
+        ),
+        ReleasePluginIO.autoImport.releaseIOPublishAction := {
+          assert(publishTo.value.nonEmpty, "publishTo mutation was not threaded to publish")
+          sbt.IO.touch(published)
+        }
+      )
+    }.use { case (ctx, (probes, published)) =>
+      for {
+        validated <- PublishSteps.publishArtifacts.validate(ctx)
+        _          = assert(!probes.exists())
+        result    <- PublishSteps.publishArtifacts.execute(
+                       validated.withVersions("1.0.0", "1.1.0-SNAPSHOT")
+                     )
+        probeRuns <- IO.blocking(sbt.IO.readLines(probes).count(_.nonEmpty))
+      } yield {
+        assert(!result.failed)
+        assertEquals(probeRuns, 1)
+        assert(published.exists())
+      }
+    }
+  }
+
+  test("publishArtifacts.validate - freeze publish checks independently per Scala iteration") {
+    loadedContextResource(s"$fixturePrefix-val-checks-per-scala") { _ =>
+      () -> Seq(
+        scalaVersion                                      := "2.13.16",
+        ReleasePluginIO.autoImport.releaseIOPublishChecks := scalaVersion.value.startsWith("3"),
+        publish / skip                                    := false
+      )
     }.use { case (ctx, _) =>
-      PublishSteps.publishArtifacts.validate(ctx).void
+      for {
+        first      <- PublishSteps.publishArtifacts.validate(ctx)
+        scala3State = TestSupport.appendSessionSettings(
+                        first.state,
+                        Seq(scalaVersion := "3.3.6")
+                      )
+        _          <- assertFailure[IllegalStateException, ReleaseContext](
+                        PublishSteps.publishArtifacts.validate(first.withState(scala3State))
+                      )(err => assert(err.getMessage.contains("publishTo not configured")))
+      } yield ()
+    }
+  }
+
+  test(
+    "publishArtifacts - checks disabled defer aggregate version mismatch to execute"
+  ) {
+    multiProjectContextResource(
+      s"$fixturePrefix-version-mismatch-checks-off",
+      rootSettings = Seq(
+        ReleasePluginIO.autoImport.releaseIOPublishChecks                  := false,
+        ReleasePluginIO.autoImport.releaseIOPublishAction / Keys.aggregate := true,
+        version                                                            := "1.0.0"
+      ),
+      childSettings = Seq(version := "2.0.0")
+    ).use { case (ctx, _) =>
+      for {
+        validated <- PublishSteps.publishArtifacts.validate(ctx)
+        _         <- assertFailure[IllegalStateException, ReleaseContext](
+                       PublishSteps.publishArtifacts.execute(
+                         validated.withVersions("1.0.0", "1.1.0-SNAPSHOT")
+                       )
+                     ) { err =>
+                       assert(err.getMessage.contains("aggregated publish targets"))
+                       assert(err.getMessage.contains("child='2.0.0'"))
+                     }
+      } yield ()
+    }
+  }
+
+  test("publish hooks - checks disabled retain the live publish / skip decision") {
+    loadedContextResource(s"$fixturePrefix-live-gate-checks-off") { _ =>
+      () -> Seq(
+        ReleasePluginIO.autoImport.releaseIOPublishChecks := false,
+        publish / skip                                    := true
+      )
+    }.use { case (ctx, _) =>
+      for {
+        gate       <- PublishSteps.publishGateValidation(ctx)
+        initial    <- PublishSteps.shouldRunPublishHooksAtExecute(gate.context)
+        drifted     = TestSupport.appendSessionSettings(
+                        gate.context.state,
+                        Seq(publish / skip := false)
+                      )
+        afterDrift <- PublishSteps.shouldRunPublishHooksAtExecute(gate.context.withState(drifted))
+      } yield {
+        assert(gate.decision)
+        assertEquals(initial, false)
+        assertEquals(afterDrift, true)
+      }
+    }
+  }
+
+  test("publishArtifacts.execute - suppress an unstable live identity probe") {
+    loadedContextResource(s"$fixturePrefix-unstable-checks-off") { dir =>
+      val probes    = new File(dir, "skip-probes")
+      val published = new File(dir, "published")
+      (probes, published) -> Seq(
+        ReleasePluginIO.autoImport.releaseIOPublishChecks := false,
+        scalaVersion                                      := "2.13.16",
+        CoreStepTestCompat.publishSkipWithScalaVersionStateMutation(
+          probes,
+          nextScalaVersion = "3.3.6",
+          skipped = false
+        ),
+        ReleasePluginIO.autoImport.releaseIOPublishAction := sbt.IO.touch(published)
+      )
+    }.use { case (ctx, (probes, published)) =>
+      PublishSteps.publishArtifacts.execute(ctx).map { result =>
+        assert(probes.exists())
+        assert(!published.exists())
+        assertEquals(result.publishExecutedKeys, Some(Set.empty[String]))
+      }
+    }
+  }
+
+  test(
+    "publishArtifacts validation - reuse the hook probe and validate publishTo against " +
+      "the state returned by publish / skip"
+  ) {
+    loadedContextResource(s"$fixturePrefix-val-stateful-target") { dir =>
+      val marker = new File(dir, "skip-probes")
+      val target = Resolver.file("local", new File(dir, "repo"))
+      marker -> Seq(
+        ReleasePluginIO.autoImport.releaseIOPublishChecks := true,
+        publishTo                                         := None,
+        CoreStepTestCompat.publishSkipWithTargetStateMutation(
+          marker,
+          Some(target),
+          skipped = false
+        )
+      )
+    }.use { case (ctx, marker) =>
+      for {
+        gate      <- PublishSteps.publishGateValidation(ctx)
+        validated <- PublishSteps.publishArtifacts.validate(gate.context)
+        afterGate <- PublishSteps.publishGateValidation(validated)
+        probes    <- IO.blocking(sbt.IO.readLines(marker).count(_.nonEmpty))
+      } yield {
+        assert(gate.decision)
+        assert(afterGate.decision)
+        assert(
+          afterGate.context
+            .publishValidationBatch(PublishSteps.publishGateKey(afterGate.context))
+            .exists(batch =>
+              batch.checksEnabled && batch.targetProgress == PublishTargetProgress.Validated
+            )
+        )
+        assertEquals(probes, 1)
+      }
+    }
+  }
+
+  test("publishArtifacts.validate - observe publishTo removal from publish / skip state") {
+    loadedContextResource(s"$fixturePrefix-val-stateful-target-removed") { dir =>
+      val marker = new File(dir, "skip-probes")
+      marker -> Seq(
+        ReleasePluginIO.autoImport.releaseIOPublishChecks := true,
+        publishTo                                         := Some(
+          Resolver.file("local", new File(dir, "repo"))
+        ),
+        CoreStepTestCompat.publishSkipWithTargetStateMutation(
+          marker,
+          None,
+          skipped = false
+        )
+      )
+    }.use { case (ctx, marker) =>
+      for {
+        result <- PublishSteps.publishArtifacts.validate(ctx).attempt
+        probes <- IO.blocking(sbt.IO.readLines(marker).count(_.nonEmpty))
+      } yield {
+        assert(result.left.exists(_.getMessage.contains("publishTo not configured")))
+        assertEquals(probes, 1)
+      }
+    }
+  }
+
+  test("publishArtifacts.execute - do not enable a target skipped during validation") {
+    loadedContextResource(s"$fixturePrefix-val-skip-drift") { dir =>
+      val marker = new File(dir, "published")
+      marker -> Seq(
+        ReleasePluginIO.autoImport.releaseIOPublishChecks := true,
+        publish / skip                                    := true,
+        ReleasePluginIO.autoImport.releaseIOPublishAction := sbt.IO.touch(marker)
+      )
+    }.use { case (ctx, marker) =>
+      for {
+        validated <- PublishSteps.publishArtifacts.validate(ctx)
+        drifted    = TestSupport.appendSessionSettings(
+                       validated.state,
+                       Seq(publish / skip := false)
+                     )
+        result    <- PublishSteps.publishArtifacts.execute(validated.withState(drifted))
+      } yield {
+        assert(!marker.exists())
+        assertEquals(result.publishExecutedKeys, Some(Set.empty[String]))
+      }
+    }
+  }
+
+  test("publishArtifacts.execute - suppress a batch key introduced after checked validation") {
+    loadedContextResource(s"$fixturePrefix-val-batch-key-drift") { dir =>
+      val published = new File(dir, "published")
+      published -> Seq(
+        ReleasePluginIO.autoImport.releaseIOPublishChecks := true,
+        scalaVersion                                      := "2.13.16",
+        publishTo                                         := Some(
+          Resolver.file("local", new File(dir, "repo"))
+        ),
+        ReleasePluginIO.autoImport.releaseIOPublishAction := sbt.IO.touch(published)
+      )
+    }.use { case (ctx, published) =>
+      for {
+        validated <- PublishSteps.publishArtifacts.validate(ctx)
+        drifted    = TestSupport.appendSessionSettings(
+                       validated.state,
+                       Seq(scalaVersion := "3.3.6")
+                     )
+        result    <- PublishSteps.publishArtifacts.execute(validated.withState(drifted))
+      } yield {
+        assert(!published.exists())
+        assertEquals(result.publishExecutedKeys, Some(Set.empty[String]))
+      }
+    }
+  }
+
+  test("publishArtifacts.execute - suppress an aggregate target introduced after validation") {
+    multiProjectContextResource(
+      s"$fixturePrefix-val-target-drift",
+      rootSettings = Seq(
+        version                                                            := "1.0.0",
+        ReleasePluginIO.autoImport.releaseIOPublishChecks                  := true,
+        ReleasePluginIO.autoImport.releaseIOPublishAction / Keys.aggregate := false,
+        publishTo                                                          := Some(
+          Resolver.file("local", new File("target/repo"))
+        ),
+        ReleasePluginIO.autoImport.releaseIOPublishAction                  :=
+          sbt.IO.touch(baseDirectory.value / "root-published")
+      ),
+      childSettings = Seq(
+        version                                           := "1.0.0",
+        ReleasePluginIO.autoImport.releaseIOPublishAction :=
+          sbt.IO.touch(baseDirectory.value / "child-published")
+      )
+    ).use { case (ctx, _) =>
+      val base = SbtRuntime.extracted(ctx.state).get(baseDirectory)
+      for {
+        validated <- PublishSteps.publishArtifacts.validate(ctx)
+        drifted    = TestSupport.appendSessionSettings(
+                       validated.state,
+                       Seq(
+                         ReleasePluginIO.autoImport.releaseIOPublishAction / Keys.aggregate := true
+                       )
+                     )
+        result    <- PublishSteps.publishArtifacts.execute(validated.withState(drifted))
+      } yield {
+        assert(!(base / "root-published").exists())
+        assert(!(base / "child" / "child-published").exists())
+        assertEquals(result.publishExecutedKeys, Some(Set.empty[String]))
+      }
     }
   }
 
@@ -383,6 +763,121 @@ class PublishStepsSpec extends CatsEffectSuite {
     }
   }
 
+  test("publishArtifacts.validate - accept an inherited global version on aggregate children") {
+    multiProjectContextResource(
+      s"$fixturePrefix-version-global-inherited",
+      rootSettings = versionOverlaySettings(useGlobal = true) ++ Seq(
+        ThisBuild / version                                                := "0.1.0-SNAPSHOT",
+        ReleasePluginIO.autoImport.releaseIOPublishChecks                  := true,
+        ReleasePluginIO.autoImport.releaseIOPublishAction / Keys.aggregate := true,
+        publishTo                                                          := Some(
+          Resolver.file("local", new File("target/repo"))
+        )
+      ),
+      childSettings = Seq(
+        publishTo := Some(Resolver.file("local", new File("target/child-repo")))
+      )
+    ).use { case (ctx, _) =>
+      PublishSteps.publishArtifacts
+        .validate(ctx.withVersions("1.0.0", "1.1.0-SNAPSHOT"))
+        .void
+    }
+  }
+
+  test("publishArtifacts.validate - reject a child project override of the global version") {
+    multiProjectContextResource(
+      s"$fixturePrefix-version-global-override",
+      rootSettings = versionOverlaySettings(useGlobal = true) ++ Seq(
+        ThisBuild / version                                                := "0.1.0-SNAPSHOT",
+        ReleasePluginIO.autoImport.releaseIOPublishChecks                  := true,
+        ReleasePluginIO.autoImport.releaseIOPublishAction / Keys.aggregate := true,
+        publishTo                                                          := Some(
+          Resolver.file("local", new File("target/repo"))
+        )
+      ),
+      childSettings = Seq(
+        version   := "2.0.0",
+        publishTo := Some(Resolver.file("local", new File("target/child-repo")))
+      )
+    ).use { case (ctx, _) =>
+      assertFailure[IllegalStateException, ReleaseContext](
+        PublishSteps.publishArtifacts.validate(
+          ctx.withVersions("1.0.0", "1.1.0-SNAPSHOT")
+        )
+      ) { err =>
+        assert(err.getMessage.contains("child='2.0.0'"))
+      }
+    }
+  }
+
+  test("publishArtifacts.validate - accept matching project versions when useGlobal is false") {
+    multiProjectContextResource(
+      s"$fixturePrefix-version-local-match",
+      rootSettings = versionOverlaySettings(useGlobal = false) ++ Seq(
+        version                                                            := "0.1.0-SNAPSHOT",
+        ReleasePluginIO.autoImport.releaseIOPublishChecks                  := true,
+        ReleasePluginIO.autoImport.releaseIOPublishAction / Keys.aggregate := true,
+        publishTo                                                          := Some(
+          Resolver.file("local", new File("target/repo"))
+        )
+      ),
+      childSettings = Seq(
+        version   := "1.0.0",
+        publishTo := Some(Resolver.file("local", new File("target/child-repo")))
+      )
+    ).use { case (ctx, _) =>
+      PublishSteps.publishArtifacts
+        .validate(ctx.withVersions("1.0.0", "1.1.0-SNAPSHOT"))
+        .void
+    }
+  }
+
+  test("publishArtifacts.validate - reject mismatched project versions when useGlobal is false") {
+    multiProjectContextResource(
+      s"$fixturePrefix-version-local-mismatch",
+      rootSettings = versionOverlaySettings(useGlobal = false) ++ Seq(
+        version                                                            := "0.1.0-SNAPSHOT",
+        ReleasePluginIO.autoImport.releaseIOPublishChecks                  := true,
+        ReleasePluginIO.autoImport.releaseIOPublishAction / Keys.aggregate := true,
+        publishTo                                                          := Some(
+          Resolver.file("local", new File("target/repo"))
+        )
+      ),
+      childSettings = Seq(
+        version   := "2.0.0",
+        publishTo := Some(Resolver.file("local", new File("target/child-repo")))
+      )
+    ).use { case (ctx, _) =>
+      assertFailure[IllegalStateException, ReleaseContext](
+        PublishSteps.publishArtifacts.validate(
+          ctx.withVersions("1.0.0", "1.1.0-SNAPSHOT")
+        )
+      )(err => assert(err.getMessage.contains("child='2.0.0'")))
+    }
+  }
+
+  test("publishArtifacts.validate - allow a mismatched aggregate child that is skipped") {
+    multiProjectContextResource(
+      s"$fixturePrefix-version-skipped-mismatch",
+      rootSettings = versionOverlaySettings(useGlobal = false) ++ Seq(
+        version                                                            := "0.1.0-SNAPSHOT",
+        ReleasePluginIO.autoImport.releaseIOPublishChecks                  := true,
+        ReleasePluginIO.autoImport.releaseIOPublishAction / Keys.aggregate := true,
+        publishTo                                                          := Some(
+          Resolver.file("local", new File("target/repo"))
+        )
+      ),
+      childSettings = Seq(
+        version        := "2.0.0",
+        publish / skip := true
+      )
+    ).use { case (ctx, _) =>
+      PublishSteps.publishArtifacts
+        .validate(ctx.withVersions("1.0.0", "1.1.0-SNAPSHOT"))
+        .void
+    }
+  }
+
   test(
     "publishArtifacts.validate - fail with publishTo error when CLI release-version override " +
       "is present and publish/skip := isSnapshot.value (overlay engages, catches the bypass)"
@@ -446,6 +941,16 @@ class PublishStepsSpec extends CatsEffectSuite {
       ReleasePluginIO.autoImport.releaseIOVersioningUseGlobal    := true
     )
   }
+
+  private def versionOverlaySettings(useGlobal: Boolean): Seq[Setting[?]] =
+    Seq(
+      ReleasePluginIO.autoImport.releaseIOVersioningFile         := new File("version.sbt"),
+      ReleasePluginIO.autoImport.releaseIOVersioningReadVersion  :=
+        VersionSteps.defaultReadVersion,
+      ReleasePluginIO.autoImport.releaseIOVersioningFileContents :=
+        VersionSteps.defaultWriteVersion(useGlobal),
+      ReleasePluginIO.autoImport.releaseIOVersioningUseGlobal    := useGlobal
+    )
 
   private def withCliReleaseOverride(
       ctx: ReleaseContext,
@@ -544,6 +1049,31 @@ class PublishStepsSpec extends CatsEffectSuite {
           currentProjectId = Some("root")
         )
         (ReleaseContext(state = state), ())
+      }
+    }
+
+  private def preparedMultiProjectContextResource[A](
+      prefix: String
+  )(
+      prepare: File => (A, Seq[Setting[?]], Seq[Setting[?]])
+  ): Resource[IO, (ReleaseContext, A)] =
+    TestSupport.tempDirResource(prefix).evalMap { dir =>
+      IO.blocking {
+        val (value, rootSettings, childSettings) = prepare(dir)
+        val childBase                            = new File(dir, "child")
+        childBase.mkdirs()
+        val state                                = TestSupport.loadedState(
+          dir,
+          Seq(
+            Project("root", dir)
+              .aggregate(LocalProject("child"))
+              .settings(rootSettings*),
+            Project("child", childBase)
+              .settings(childSettings*)
+          ),
+          currentProjectId = Some("root")
+        )
+        (ReleaseContext(state = state), value)
       }
     }
 

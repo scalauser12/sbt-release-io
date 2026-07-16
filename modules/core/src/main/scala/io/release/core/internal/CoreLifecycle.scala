@@ -36,8 +36,12 @@ private[release] object CoreLifecycle {
       gate: ReleaseContext => IO[Boolean] = _ => IO.pure(true),
       crossBuild: Boolean = false,
       freezeGateKey: Option[ReleaseContext => String] = None,
+      freezeGateValidation: Option[
+        ReleaseContext => IO[LifecycleCompiler.FrozenGateValidation[ReleaseContext]]
+      ] = None,
       enabled: CoreHookConfiguration => Boolean = _ => true,
-      narrowExecute: Option[ReleaseContext => IO[Boolean]] = None
+      narrowExecute: Option[ReleaseContext => IO[Boolean]] = None,
+      narrowOnMissingFrozenGate: Boolean = false
   ): Phase =
     LifecycleCompiler.singleHookPhase(
       phase = phase,
@@ -49,8 +53,10 @@ private[release] object CoreLifecycle {
       validateOf = (hook: ReleaseHookIO) => hook.validate,
       crossBuild = crossBuild,
       freezeGateKey = freezeGateKey,
+      freezeGateValidation = freezeGateValidation,
       enabled = enabled,
-      narrowExecute = narrowExecute
+      narrowExecute = narrowExecute,
+      narrowOnMissingFrozenGate = narrowOnMissingFrozenGate
     )
 
   private val publishGate: ReleaseContext => IO[Boolean] =
@@ -171,8 +177,10 @@ private[release] object CoreLifecycle {
       gate = publishGate,
       crossBuild = PublishSteps.publishArtifacts.enableCrossBuild,
       freezeGateKey = Some(scalaVersionKey),
+      freezeGateValidation = Some(PublishSteps.publishGateValidation),
       enabled = _.enablePublish,
-      narrowExecute = Some(beforePublishNarrow)
+      narrowExecute = Some(beforePublishNarrow),
+      narrowOnMissingFrozenGate = true
     ),
     builtIn(PublishSteps.publishArtifacts, _.enablePublish),
     hookPhase(
@@ -181,8 +189,10 @@ private[release] object CoreLifecycle {
       gate = publishGate,
       crossBuild = PublishSteps.publishArtifacts.enableCrossBuild,
       freezeGateKey = Some(scalaVersionKey),
+      freezeGateValidation = Some(PublishSteps.publishGateValidation),
       enabled = _.enablePublish,
-      narrowExecute = Some(afterPublishNarrow)
+      narrowExecute = Some(afterPublishNarrow),
+      narrowOnMissingFrozenGate = true
     ),
     hookPhase(HookPhases.BeforeNextVersionWrite, _.beforeNextVersionWriteHooks),
     builtIn(VersionSteps.setNextVersion),

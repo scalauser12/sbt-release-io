@@ -8,6 +8,7 @@ import io.release.vcs.Vcs
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.nio.file.StandardOpenOption
 
 private[release] object VersionWorkflow {
 
@@ -138,7 +139,16 @@ private[release] object VersionWorkflow {
       contents <- versionFileContents(versionFile, versionValue)
       _        <- IO
                     .blocking(
-                      Files.write(versionFile.toPath, contents.getBytes(StandardCharsets.UTF_8))
+                      // Intentionally omit CREATE: a late-bound mapping may point at a file
+                      // that disappeared after validation (or while contents were rendered).
+                      // Recreating it would turn a configuration/race failure into a release
+                      // commit against a different file than the one that was validated.
+                      Files.write(
+                        versionFile.toPath,
+                        contents.getBytes(StandardCharsets.UTF_8),
+                        StandardOpenOption.WRITE,
+                        StandardOpenOption.TRUNCATE_EXISTING
+                      )
                     )
                     .void
     } yield ()

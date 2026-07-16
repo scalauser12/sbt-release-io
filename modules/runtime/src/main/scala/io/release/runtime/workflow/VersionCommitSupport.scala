@@ -22,6 +22,16 @@ private[release] object VersionCommitSupport {
       committed: Boolean
   )
 
+  /** Status of the configured version-file path only. */
+  final case class VersionFileStatus(
+      modified: Boolean,
+      staged: Boolean,
+      untracked: Boolean
+  ) {
+    def commitNeeded(writeWouldChange: Boolean): Boolean =
+      writeWouldChange || modified || staged || untracked
+  }
+
   /** Atomic stage-and-commit. Wrapped in `IO.uncancelable` so a cancelled fiber cannot
     * strand staged-but-uncommitted changes — and so a cancel arriving during `add`/`commit`
     * cannot skip the caller's `postCommitVerify` invariant. Returns the post-commit hash.
@@ -79,6 +89,27 @@ private[release] object VersionCommitSupport {
           else vcs.currentHash.map(hash => ConditionalCommitResult(hash, committed = false))
         _      <- postCommitVerify
       } yield result
+    }
+
+  /** Inspect the configured version file without allowing unrelated repository status to
+    * influence the result.
+    *
+    * A release may need a commit even when rendering would not change the current bytes: an
+    * earlier hook may already have modified or staged this path, or the file may be untracked
+    * and need to be added. Callers combine this status with the pending render through
+    * [[VersionFileStatus.commitNeeded]].
+    */
+  def versionFileStatus(
+      expectedPath: String,
+      vcs: Vcs
+  ): IO[VersionFileStatus] =
+    (vcs.modifiedFiles, vcs.stagedFiles, vcs.untrackedFiles).mapN {
+      case (modified, staged, untracked) =>
+        VersionFileStatus(
+          modified = modified.contains(expectedPath),
+          staged = staged.contains(expectedPath),
+          untracked = untracked.contains(expectedPath)
+        )
     }
 
   /** Tracked files that are dirty (modified or staged) but are not in `expected`. Callers

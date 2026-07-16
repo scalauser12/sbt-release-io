@@ -9,6 +9,17 @@ import LifecycleCompilerSpec.{ItemHook, SingleHook, TestConfig, TestContext}
 
 class LifecycleCompilerSpec extends CatsEffectSuite {
 
+  private def executeSingle(
+      step: ProcessStep.Single[TestContext],
+      ctx: TestContext,
+      tracked: Boolean
+  ): IO[TestContext] =
+    if (tracked)
+      TrackedContextHandle.create(ctx).flatMap { handle =>
+        step.executeTracked(handle).flatMap(_ => handle.get)
+      }
+    else step.execute(ctx)
+
   private def executePerItem(
       step: ProcessStep.PerItem[TestContext, String],
       ctx: TestContext,
@@ -280,6 +291,99 @@ class LifecycleCompilerSpec extends CatsEffectSuite {
           steps.head.execute(TestContext(gateOpen = true)).void
         }
       }
+  }
+
+  test("compile - frozen single validation resolves context, key, and decision together") {
+    Ref.of[IO, List[String]](Nil).flatMap { events =>
+      val hook   = SingleHook(
+        name = "publish-check",
+        execute = ctx => events.update(_ :+ "unexpected-execute").as(ctx),
+        validate = _ => events.update(_ :+ "unexpected-validate")
+      )
+      val phases = Seq[LifecycleCompiler.Phase[TestConfig, TestContext, Nothing]](
+        LifecycleCompiler.singleHookPhase(
+          phase = "before-publish",
+          resolveHooks = _.singleHooks,
+          gate = _ => events.update(_ :+ "unexpected-gate").as(true),
+          nameOf = (h: SingleHook) => h.name,
+          executeOf = (h: SingleHook) => h.execute,
+          validateOf = (h: SingleHook) => h.validate,
+          freezeGateKey = Some(_.gateKey),
+          freezeGateValidation = Some(ctx =>
+            events
+              .update(_ :+ "validate-key-and-decision")
+              .as(
+                LifecycleCompiler.FrozenGateValidation(
+                  ctx.copy(gateKey = "execute"),
+                  "execute",
+                  decision = false
+                )
+              )
+          )
+        )
+      )
+
+      LifecycleCompiler
+        .compileSingle(TestConfig(singleHooks = Seq(hook)), phases)
+        .flatMap { steps =>
+          val step = steps.head
+          for {
+            validated <- step.validate(TestContext(gateOpen = true, gateKey = "validation"))
+            direct    <- executeSingle(step, validated, tracked = false)
+            tracked   <- executeSingle(step, validated, tracked = true)
+            recorded  <- events.get
+          } yield {
+            assertEquals(validated.gateKey, "execute")
+            assertEquals(direct, validated)
+            assertEquals(tracked, validated)
+            assertEquals(recorded, List("validate-key-and-decision"))
+          }
+        }
+    }
+  }
+
+  test("compile - frozen single gate narrows a missing key without caching it") {
+    Ref.of[IO, Boolean](false).flatMap { allow =>
+      val hook   = SingleHook(name = "publish-check")
+      val phases = Seq[LifecycleCompiler.Phase[TestConfig, TestContext, Nothing]](
+        LifecycleCompiler.singleHookPhase(
+          phase = "before-publish",
+          resolveHooks = _.singleHooks,
+          gate = _ => IO.pure(true),
+          nameOf = (h: SingleHook) => h.name,
+          executeOf = (h: SingleHook) => h.execute,
+          validateOf = (h: SingleHook) => h.validate,
+          freezeGateKey = Some(_.gateKey),
+          narrowExecute = Some(_ => allow.get),
+          narrowOnMissingFrozenGate = true
+        )
+      )
+
+      LifecycleCompiler
+        .compileSingle(TestConfig(singleHooks = Seq(hook)), phases)
+        .flatMap { steps =>
+          val step     = steps.head
+          val expected =
+            "Frozen gate decision missing for key 'introduced'; validate must run before execute when freezeGateKey is set"
+          for {
+            validated <- step.validate(TestContext(gateOpen = true, gateKey = "validated"))
+            skipped   <- executeSingle(
+                           step,
+                           validated.copy(gateKey = "introduced"),
+                           tracked = false
+                         )
+            _         <- allow.set(true)
+            failed    <- executeSingle(
+                           step,
+                           validated.copy(gateKey = "introduced"),
+                           tracked = true
+                         ).attempt
+          } yield {
+            assertEquals(skipped.gateKey, "introduced")
+            assertEquals(failed.left.map(_.getMessage), Left(expected))
+          }
+        }
+    }
   }
 
   test("compile - frozen per-item gate reuses validation decision during execute") {

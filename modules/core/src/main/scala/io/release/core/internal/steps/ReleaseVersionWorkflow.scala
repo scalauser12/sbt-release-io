@@ -98,8 +98,8 @@ private[release] object ReleaseVersionWorkflow {
     * by removing `ReleaseKeys.versions` from `State` before `ReleaseComposer.compose`
     * runs. Programmatic callers that bypass the command boundary (custom hosts, test
     * harnesses) must scrub `ReleaseKeys.versions` themselves; otherwise a stale
-    * prior-run value will short-circuit the seeder and `ctx.versions` will silently
-    * carry a value from the previous release.
+    * prior-run value will short-circuit both the seeder and execute-time resolver,
+    * and `ctx.versions` will silently carry a value from the previous release.
     */
   def validateInquireVersionsWithContext(ctx: ReleaseContext): IO[ReleaseContext] =
     if (ctx.releaseVersion.isDefined) IO.pure(ctx)
@@ -137,23 +137,30 @@ private[release] object ReleaseVersionWorkflow {
         }
 
   def inquireVersions(ctx: ReleaseContext): IO[ReleaseContext] =
-    resolveVersions(ctx, allowPrompts = true).flatMap { case (updatedCtx, resolved) =>
-      val resolvedCtx = updatedCtx.withVersions(resolved.releaseVersion, resolved.nextVersion)
+    resolveVersionsFromSeed(ctx)
+      .flatMap {
+        // The execution engine clears validate-time tentative seeds before any
+        // action runs, so a surviving pair is an explicit hook/custom-context value.
+        case Some(resolved) => IO.pure(resolved)
+        case None           => resolveVersions(ctx, allowPrompts = true)
+      }
+      .flatMap { case (updatedCtx, resolved) =>
+        val resolvedCtx = updatedCtx.withVersions(resolved.releaseVersion, resolved.nextVersion)
 
-      ExecutionEngine.recoverWithContext(ReleaseLogPrefixes.Core, resolvedCtx)(
-        IO.blocking {
-          resolvedCtx.state.log.info(
-            s"${ReleaseLogPrefixes.Core} Current version : ${resolved.currentVersion}"
-          )
-          resolvedCtx.state.log.info(
-            s"${ReleaseLogPrefixes.Core} Release version : ${resolved.releaseVersion}"
-          )
-          resolvedCtx.state.log.info(
-            s"${ReleaseLogPrefixes.Core} Next version    : ${resolved.nextVersion}"
-          )
-        }.as(resolvedCtx)
-      )
-    }
+        ExecutionEngine.recoverWithContext(ReleaseLogPrefixes.Core, resolvedCtx)(
+          IO.blocking {
+            resolvedCtx.state.log.info(
+              s"${ReleaseLogPrefixes.Core} Current version : ${resolved.currentVersion}"
+            )
+            resolvedCtx.state.log.info(
+              s"${ReleaseLogPrefixes.Core} Release version : ${resolved.releaseVersion}"
+            )
+            resolvedCtx.state.log.info(
+              s"${ReleaseLogPrefixes.Core} Next version    : ${resolved.nextVersion}"
+            )
+          }.as(resolvedCtx)
+        )
+      }
 
   def writeReleaseVersion(ctx: ReleaseContext): IO[ReleaseContext] =
     requireVersions(ctx) { case (releaseVersion, _) =>
@@ -239,7 +246,9 @@ private[release] object ReleaseVersionWorkflow {
         actionName = "commit-release-version",
         msgKey = releaseIOVcsReleaseCommitMessage,
         version = releaseVersion,
-        // Scope the manifest hash to every project that `runAggregated` will publish.
+        // Scope the manifest hash to every project reached by the aggregate publish graph.
+        // Publish execution later filters that graph by `publish / skip`, so this is a safe
+        // superset of the selected actions that may emit artifacts.
         // An unscoped `releaseIOInternalReleaseHash := Some(...)` would resolve only
         // against the root project's currentRef (transformSettings rewrites `This` to
         // `extracted.currentRef`), and aggregated child projects with their own
@@ -274,6 +283,7 @@ private[release] object ReleaseVersionWorkflow {
   ): IO[ReleaseContext] =
     for {
       versionPlan             <- IO.blocking(resolveVersionPlan(ctx))
+      _                       <- ensureVersionFileExists(versionPlan.versionFile)
       commitResult            <- commitVersionNative(ctx, actionName, msgKey, versionPlan.versionFile)
       (resultCtx, currentHash) = commitResult
       finalCtx                <-
@@ -292,12 +302,12 @@ private[release] object ReleaseVersionWorkflow {
 
   /** Reuse already-seeded `ctx.versions` to assemble a `ResolvedVersions`
     * without re-evaluating the `releaseIOVersioningReleaseVersion` /
-    * `releaseIOVersioningNextVersion` sbt tasks. Used by `releaseIO check`
-    * preflight to render the version summary without paying for a second
-    * round of resolver-task evaluation after `validateInquireVersionsWithContext`
-    * has already populated `ctx.versions`. The `versionFile` and
-    * `currentVersion` fields are still read from disk (no task evaluation,
-    * just I/O) because callers need them in the summary.
+    * `releaseIOVersioningNextVersion` sbt tasks. `inquireVersions.execute` uses
+    * this for explicit pairs that survive the validate→execute boundary, while
+    * `releaseIO check` uses it to render the tentative validation summary without
+    * paying for a second round of resolver-task evaluation. The `versionFile` and
+    * `currentVersion` fields are still read from disk (no task evaluation, just I/O)
+    * so late-bound mappings and unreadable files remain authoritative.
     */
   private[release] def resolveVersionsFromSeed(
       ctx: ReleaseContext
@@ -374,7 +384,7 @@ private[release] object ReleaseVersionWorkflow {
     )
   }
 
-  private def ensureVersionFileExists(versionFile: File): IO[Unit] =
+  private[release] def ensureVersionFileExists(versionFile: File): IO[Unit] =
     VersionWorkflow.ensureVersionFileExists(
       versionFile,
       s"Version file not found: ${versionFile.getPath}. " +
@@ -391,19 +401,15 @@ private[release] object ReleaseVersionWorkflow {
   ): IO[(ReleaseContext, String)] =
     required(ctx.vcs, CoreReleaseStepHelpers.MissingVcsMessage) { vcs =>
       for {
-        signFlags       <- loadSignFlags(ctx.state)
-        relativePath    <- VcsOps.relativizeToBase(vcs, versionFile)
-        _               <- assertOnlyVersionFileDirty(actionName, relativePath, vcs)
-        trackedDirty    <- VcsOps.trackedStatus(vcs)
-        untracked       <- vcs.untrackedFiles
-        // The version file may be untracked when `releaseIOVcsIgnoreUntrackedFiles
-        // := true` lets the clean check pass with an untracked version file.
-        // After `writeVersion` it is still untracked, so `trackedDirty` is empty
-        // and the no-op branch would otherwise tag/push without ever committing
-        // the version bump.
-        versionUntracked = untracked.contains(relativePath)
-        shouldCommit     = trackedDirty.nonEmpty || versionUntracked
-        result          <-
+        signFlags     <- loadSignFlags(ctx.state)
+        relativePath  <- VcsOps.relativizeToBase(vcs, versionFile)
+        _             <- assertOnlyVersionFileDirty(actionName, relativePath, vcs)
+        versionStatus <- VersionCommitSupport.versionFileStatus(relativePath, vcs)
+        // Rendering has already happened by this point. Exact-path status therefore
+        // captures every remaining reason the release step must create a commit,
+        // including a pre-staged or untracked configured version file.
+        shouldCommit   = versionStatus.commitNeeded(writeWouldChange = false)
+        result        <-
           if (shouldCommit)
             performCommit(ctx, actionName, vcs, relativePath, signFlags, commitMessageKey)
           else
@@ -508,12 +514,12 @@ private[release] object ReleaseVersionWorkflow {
   ): IO[ReleaseContext] =
     for {
       versionPlan <- IO.blocking(resolveVersionPlan(ctx))
-      // Re-validate path-within-VCS-root and gitignore status against the freshly
-      // resolved plan: a before-version-resolution hook can install a late-bound
-      // `releaseIOVersioningFile` via session settings after `inquireVersions.validate`
-      // ran, so the validate-time checks at [[validateInquireVersions]] cannot see the
-      // final value. Running the checks here means a misconfigured or gitignored file
-      // is rejected before the on-disk write rather than after.
+      // Re-validate existence, path-within-VCS-root, and gitignore status against the
+      // freshly resolved plan: hooks can install a late-bound `releaseIOVersioningFile`
+      // after `inquireVersions.validate` (or even after inquire execute), so the earlier
+      // checks cannot see the final value. Running the checks here means a missing,
+      // misconfigured, or gitignored file is rejected before the on-disk write.
+      _           <- ensureVersionFileExists(versionPlan.versionFile)
       _           <- VcsOps.resolveVcs(ctx).flatMap { vcs =>
                        VcsOps.relativizeToBase(vcs, versionPlan.versionFile).flatMap { rel =>
                          VersionWorkflow.assertVersionFileNotIgnored(actionName, rel, vcs)

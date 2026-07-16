@@ -423,6 +423,51 @@ class VersionStepsSpec extends CatsEffectSuite with ReleaseManifestTestSettings 
       }
   }
 
+  test("inquireVersions.execute - preserve explicit versions and bypass resolver tasks") {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      writeVersionFile(dir, """ThisBuild / version := "0.1.0-SNAPSHOT"""" + "\n").flatMap {
+        versionFile =>
+          val resolverInvocations = new AtomicInteger(0)
+          val state               = TestSupport.loadedState(
+            dir,
+            Seq(
+              Project("root", dir).settings(
+                releaseIOVersioningFile           := versionFile,
+                releaseIOVersioningReadVersion    := VersionSteps.defaultReadVersion,
+                releaseIOVersioningFileContents   := VersionSteps.defaultWriteVersion(
+                  useGlobalVersion = true
+                ),
+                releaseIOVersioningUseGlobal      := true,
+                releaseIOVersioningReleaseVersion := {
+                  resolverInvocations.incrementAndGet()
+                  (version: String) => version.stripSuffix("-SNAPSHOT")
+                },
+                releaseIOVersioningNextVersion    := {
+                  resolverInvocations.incrementAndGet()
+                  (_: String) => "0.2.0-SNAPSHOT"
+                }
+              )
+            )
+          )
+          val explicit            = "9.9.9" -> "10.0.0-SNAPSHOT"
+          // Install the pair directly so inquire execution itself must refresh the
+          // ReleaseKeys.versions mirror instead of inheriting it from withVersions.
+          val ctx                 = ReleaseContext(state = state, versions = Some(explicit))
+          assertEquals(ctx.state.get(io.release.ReleaseKeys.versions), None)
+
+          VersionSteps.inquireVersions.execute(ctx).map { result =>
+            assertEquals(result.versions, Some(explicit))
+            assertEquals(result.state.get(io.release.ReleaseKeys.versions), Some(explicit))
+            assertEquals(
+              resolverInvocations.get(),
+              0,
+              "explicit versions must bypass the release/next version resolver tasks"
+            )
+          }
+      }
+    }
+  }
+
   test(
     "resolveVersionsFromSeed - reuse ctx.versions without re-evaluating the resolver tasks"
   ) {
@@ -1150,6 +1195,48 @@ class VersionStepsSpec extends CatsEffectSuite with ReleaseManifestTestSettings 
               assertEquals(hash, Some("commit-hash-abc"))
               assertEquals(tag, Some("v1.0.0"))
             }
+      }
+    }
+  }
+
+  private val lateBoundMissingWriteCases: Seq[(String, ReleaseContext => IO[ReleaseContext])] =
+    Seq(
+      "setReleaseVersion" -> VersionSteps.setReleaseVersion.execute,
+      "setNextVersion"    -> VersionSteps.setNextVersion.execute
+    )
+
+  lateBoundMissingWriteCases.foreach { case (stepName, execute) =>
+    test(s"$stepName.execute - reject a late-bound missing version file before rendering") {
+      TestSupport.tempDirResource(s"$fixturePrefix-$stepName-missing").use { dir =>
+        val missing           = new File(dir, "version-typo.sbt")
+        val renderInvocations = new AtomicInteger(0)
+        val state             = TestSupport.loadedState(
+          dir,
+          Seq(
+            Project("root", dir).settings(
+              releaseIOVersioningFile         := missing,
+              releaseIOVersioningReadVersion  := VersionSteps.defaultReadVersion,
+              releaseIOVersioningFileContents := { (_, version) =>
+                renderInvocations.incrementAndGet()
+                IO.pure(s"""version := "$version"""" + "\n")
+              },
+              releaseIOVersioningUseGlobal    := true
+            )
+          )
+        )
+        val ctx               = ReleaseContext(state = state)
+          .withVersions("1.0.0", "1.1.0-SNAPSHOT")
+
+        TestAssertions.assertFailure[IllegalStateException, ReleaseContext](execute(ctx)) { err =>
+          assert(err.getMessage.contains("Version file not found"))
+          assert(err.getMessage.contains(missing.getName))
+          assert(!missing.exists(), "the missing late-bound path must not be created")
+          assertEquals(
+            renderInvocations.get(),
+            0,
+            "version contents must not be rendered after the existence check fails"
+          )
+        }
       }
     }
   }

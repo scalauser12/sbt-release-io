@@ -5,9 +5,13 @@ $ exec git config user.name "Test User"
 $ exec git add .gitignore build.sbt version.sbt project/plugins.sbt
 $ exec git commit -m "Initial commit"
 
+# sbt evaluates publish / skip while loading this fixture. Clear those probes so the
+# remaining count covers release validation and execution only.
+> resetPublishProbe
+
 > releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
 
-# Verify the custom publish action ran
+# Verify the custom publish action and live publish/skip probe each ran exactly once.
 > checkPublished
 
 # Verify version was bumped (release completed successfully)

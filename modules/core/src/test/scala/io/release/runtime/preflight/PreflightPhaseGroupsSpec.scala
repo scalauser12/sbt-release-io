@@ -150,18 +150,18 @@ class PreflightPhaseGroupsSpec extends CatsEffectSuite {
   // ── dispatchPreflightTag ───────────────────────────────────────────
 
   test(
-    "dispatchPreflightTag - skips wouldChange and calls runPreflight(None) when builtIn=false"
+    "dispatchPreflightTag - skips commitNeeded and calls runPreflight(None) when builtIn=false"
   ) {
-    Ref.of[IO, Boolean](false).flatMap { wouldChangeEvaluated =>
-      val wouldChange: IO[Boolean] = wouldChangeEvaluated.set(true).as(false)
+    Ref.of[IO, Boolean](false).flatMap { commitNeededEvaluated =>
+      val commitNeeded: IO[Boolean] = commitNeededEvaluated.set(true).as(false)
       PreflightPhaseGroups
         .dispatchPreflightTag(
           builtInIncludesReleaseWriteAndCommit = false,
-          wouldChange = wouldChange,
+          commitNeeded = commitNeeded,
           runPreflight = override_ => IO.pure(override_.isDefined)
         )
         .flatMap { observedHadOverride =>
-          wouldChangeEvaluated.get.map { evaluated =>
+          commitNeededEvaluated.get.map { evaluated =>
             assertEquals(
               observedHadOverride,
               false,
@@ -170,7 +170,7 @@ class PreflightPhaseGroupsSpec extends CatsEffectSuite {
             assertEquals(
               evaluated,
               false,
-              "wouldChange must not be evaluated when builtIn=false"
+              "commitNeeded must not be evaluated when builtIn=false"
             )
           }
         }
@@ -178,24 +178,24 @@ class PreflightPhaseGroupsSpec extends CatsEffectSuite {
   }
 
   test(
-    "dispatchPreflightTag - calls runPreflight(None) when builtIn=true and wouldChange=false"
+    "dispatchPreflightTag - calls runPreflight(None) when builtIn=true and commitNeeded=false"
   ) {
     PreflightPhaseGroups
       .dispatchPreflightTag(
         builtInIncludesReleaseWriteAndCommit = true,
-        wouldChange = IO.pure(false),
+        commitNeeded = IO.pure(false),
         runPreflight = override_ => IO.pure(override_.isDefined)
       )
       .map(observed => assertEquals(observed, false))
   }
 
   test(
-    "dispatchPreflightTag - calls runPreflight(Some(_ => FutureReleaseCommit)) when builtIn=true and wouldChange=true"
+    "dispatchPreflightTag - calls runPreflight(Some(_ => FutureReleaseCommit)) when builtIn=true and commitNeeded=true"
   ) {
     PreflightPhaseGroups
       .dispatchPreflightTag(
         builtInIncludesReleaseWriteAndCommit = true,
-        wouldChange = IO.pure(true),
+        commitNeeded = IO.pure(true),
         runPreflight = {
           case Some(callback) =>
             // Verify the override returns FutureReleaseCommit regardless of which Vcs
@@ -207,7 +207,7 @@ class PreflightPhaseGroupsSpec extends CatsEffectSuite {
             }
           case None           =>
             IO.raiseError(
-              new AssertionError("expected Some(callback) when wouldChange=true")
+              new AssertionError("expected Some(callback) when commitNeeded=true")
             )
         }
       )
@@ -218,18 +218,18 @@ class PreflightPhaseGroupsSpec extends CatsEffectSuite {
     PreflightPhaseGroups
       .dispatchPreflightTag(
         builtInIncludesReleaseWriteAndCommit = false,
-        wouldChange = IO.pure(true),
+        commitNeeded = IO.pure(true),
         runPreflight = _ => IO.pure(42)
       )
       .map(observed => assertEquals(observed, 42))
   }
 
-  test("dispatchPreflightTag - propagates errors from wouldChange") {
-    val boom = new RuntimeException("would-change boom")
+  test("dispatchPreflightTag - propagates errors from commitNeeded") {
+    val boom = new RuntimeException("commit-needed boom")
     PreflightPhaseGroups
       .dispatchPreflightTag(
         builtInIncludesReleaseWriteAndCommit = true,
-        wouldChange = IO.raiseError[Boolean](boom),
+        commitNeeded = IO.raiseError[Boolean](boom),
         runPreflight = _ => IO.pure("unused")
       )
       .attempt
@@ -241,7 +241,7 @@ class PreflightPhaseGroupsSpec extends CatsEffectSuite {
     PreflightPhaseGroups
       .dispatchPreflightTag(
         builtInIncludesReleaseWriteAndCommit = false,
-        wouldChange = IO.pure(false),
+        commitNeeded = IO.pure(false),
         runPreflight = _ => IO.raiseError[String](boom)
       )
       .attempt
