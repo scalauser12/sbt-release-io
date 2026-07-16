@@ -2,16 +2,16 @@ package io.release.runtime.sbt
 
 import _root_.sbt.{internal as _, *}
 
-/** Resolve the projects that `runAggregated` will actually execute for a given task key.
+/** Resolve the projects that sbt task aggregation reaches for a given task key.
   *
   * Mirrors sbt's `runAggregated` expansion: walks the aggregate tree from
   * `extracted.currentRef`, honoring per-project `aggregate := false` by stopping
   * descent at any project whose `aggregationEnabled` is `false`.
   *
-  * Used by both core publish (where the publish step itself fans out) and core's
-  * commit/tag steps (which install per-`ProjectRef` manifest metadata so child
-  * artifacts published via `runAggregated` carry the same `Vcs-Release-Hash` /
-  * `Vcs-Release-Tag` entries as the root).
+  * Core publish filters this expansion by `publish / skip`, then evaluates the eligible
+  * scoped actions directly in one selected task graph. The commit/tag steps use the same
+  * expansion to install per-`ProjectRef` manifest metadata so child artifacts carry the
+  * same `Vcs-Release-Hash` / `Vcs-Release-Tag` entries as the root.
   */
 private[release] object AggregatePublishTargets {
 

@@ -10,6 +10,85 @@ import java.io.File
 
 class VersionCommitSupportSpec extends CatsEffectSuite {
 
+  test("versionFileStatus - use only the exact configured path to decide whether to commit") {
+    val expectedPath = "config/release-version.sbt"
+
+    for {
+      clean     <- VersionCommitSupport.versionFileStatus(expectedPath, statusVcs())
+      modified  <- VersionCommitSupport.versionFileStatus(
+                     expectedPath,
+                     statusVcs(modified = Seq(expectedPath))
+                   )
+      staged    <- VersionCommitSupport.versionFileStatus(
+                     expectedPath,
+                     statusVcs(staged = Seq(expectedPath))
+                   )
+      untracked <- VersionCommitSupport.versionFileStatus(
+                     expectedPath,
+                     statusVcs(untracked = Seq(expectedPath))
+                   )
+      unrelated <- VersionCommitSupport.versionFileStatus(
+                     expectedPath,
+                     statusVcs(
+                       modified = Seq("other-modified.sbt"),
+                       staged = Seq("other-staged.sbt"),
+                       untracked = Seq("other-untracked.sbt")
+                     )
+                   )
+    } yield {
+      assertEquals(
+        clean,
+        VersionCommitSupport.VersionFileStatus(
+          modified = false,
+          staged = false,
+          untracked = false
+        )
+      )
+      assert(!clean.commitNeeded(writeWouldChange = false))
+      assert(clean.commitNeeded(writeWouldChange = true))
+
+      assertEquals(
+        modified,
+        VersionCommitSupport.VersionFileStatus(
+          modified = true,
+          staged = false,
+          untracked = false
+        )
+      )
+      assert(modified.commitNeeded(writeWouldChange = false))
+
+      assertEquals(
+        staged,
+        VersionCommitSupport.VersionFileStatus(
+          modified = false,
+          staged = true,
+          untracked = false
+        )
+      )
+      assert(staged.commitNeeded(writeWouldChange = false))
+
+      assertEquals(
+        untracked,
+        VersionCommitSupport.VersionFileStatus(
+          modified = false,
+          staged = false,
+          untracked = true
+        )
+      )
+      assert(untracked.commitNeeded(writeWouldChange = false))
+
+      assertEquals(
+        unrelated,
+        VersionCommitSupport.VersionFileStatus(
+          modified = false,
+          staged = false,
+          untracked = false
+        )
+      )
+      assert(!unrelated.commitNeeded(writeWouldChange = false))
+    }
+  }
+
   test("stageAndCommitIfChangedAtomic - retain HEAD and verify a no-op") {
     for {
       events <- Ref.of[IO, Vector[String]](Vector.empty)
@@ -130,6 +209,17 @@ class VersionCommitSupportSpec extends CatsEffectSuite {
 
       override def currentHash: IO[String] =
         events.update(_ :+ "hash").as(hash)
+    }
+
+  private def statusVcs(
+      modified: Seq[String] = Seq.empty,
+      staged: Seq[String] = Seq.empty,
+      untracked: Seq[String] = Seq.empty
+  ): Vcs =
+    new StubVcs {
+      override def modifiedFiles: IO[Seq[String]]  = IO.pure(modified)
+      override def stagedFiles: IO[Seq[String]]    = IO.pure(staged)
+      override def untrackedFiles: IO[Seq[String]] = IO.pure(untracked)
     }
 
   private abstract class StubVcs extends Vcs {

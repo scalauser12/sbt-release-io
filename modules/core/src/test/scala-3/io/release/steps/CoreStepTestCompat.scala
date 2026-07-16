@@ -177,3 +177,57 @@ private[steps] object CoreStepTestCompat:
         )
       }
       .value
+
+  def publishSkipWithTargetStateMutation(
+      marker: File,
+      target: Option[Resolver],
+      skipped: Boolean
+  ): Setting[?] =
+    publish / skip := Def
+      .task[Boolean] {
+        sbt.IO.append(marker, "ran\n")
+        skipped
+      }
+      .updateState { (state: State, _: Boolean) =>
+        _root_.io.release.runtime.sbt.SbtRuntime.appendWithSession(
+          state,
+          Seq(publishTo := target)
+        )
+      }
+      .value
+
+  /** Task-valued skip that returns `true` while changing the root project's next
+    * evaluation to `false`. The transient validation mutation is discarded, while
+    * execute threads the returned State into selected aggregate execution.
+    */
+  def publishSkipWithSelfReenable(marker: File): Setting[?] =
+    publish / skip := Def
+      .task[Boolean] {
+        sbt.IO.append(marker, "ran\n")
+        true
+      }
+      .updateState { (state: State, _: Boolean) =>
+        _root_.io.release.runtime.sbt.SbtRuntime.appendWithSession(
+          state,
+          Seq(publish / skip := false)
+        )
+      }
+      .value
+
+  def publishSkipWithScalaVersionStateMutation(
+      marker: File,
+      nextScalaVersion: String,
+      skipped: Boolean
+  ): Setting[?] =
+    publish / skip := Def
+      .task[Boolean] {
+        sbt.IO.append(marker, "ran\n")
+        skipped
+      }
+      .updateState { (state: State, _: Boolean) =>
+        _root_.io.release.runtime.sbt.SbtRuntime.appendWithSession(
+          state,
+          Seq(scalaVersion := nextScalaVersion)
+        )
+      }
+      .value

@@ -22,6 +22,14 @@ private[release] object SbtRuntime {
   def runTask[A](state: State, key: TaskKey[A]): (State, A) =
     extracted(state).runTask(key, state)
 
+  /** Run a single aggregated task graph restricted to the requested project roots. */
+  def runTaskAggregatedForProjects[T](
+      state: State,
+      taskKey: TaskKey[T],
+      projects: Seq[ProjectRef]
+  ): State =
+    SbtCompat.runTaskAggregatedForProjects(state, taskKey, projects)
+
   /** Resolves the active `InteractionService` for the given `State`.
     *
     * Precedence:

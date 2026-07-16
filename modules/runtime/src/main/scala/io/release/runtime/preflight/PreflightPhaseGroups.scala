@@ -76,22 +76,23 @@ private[release] object PreflightPhaseGroups {
   /** Run the appropriate preflight call given whether the built-in preflight
     * already covers the release-write-and-commit pair.
     *
-    * When the built-in pair is in the plan AND the release write would mutate
-    * the version file, the underlying preflight runs with a callback that pins
-    * the expected commit to [[TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit]]
+    * When the built-in pair is in the plan AND the configured version-file state
+    * means the release will create a commit, the underlying preflight runs with a callback
+    * that pins the expected commit to
+    * [[TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit]]
     * — telling the conflict resolver "the tag will land on a NEW commit." When
-    * the pair isn't in the plan or the release write is a no-op (version file
-    * already matches), the preflight runs with its default commit-target callback
+    * the pair isn't in the plan or no release commit is needed, the preflight runs
+    * with its default commit-target callback
     * (`vcs.currentHash` → `ExactCommit`).
     */
   def dispatchPreflightTag[A](
       builtInIncludesReleaseWriteAndCommit: Boolean,
-      wouldChange: => IO[Boolean],
+      commitNeeded: => IO[Boolean],
       runPreflight: Option[Vcs => IO[TagConflictResolver.PreflightCommitTarget]] => IO[A]
   ): IO[A] =
     if (!builtInIncludesReleaseWriteAndCommit) runPreflight(None)
     else
-      wouldChange.flatMap {
+      commitNeeded.flatMap {
         case true  =>
           runPreflight(
             Some(_ => IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit))

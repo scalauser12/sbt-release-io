@@ -805,13 +805,82 @@ class CorePreflightSpec extends CatsEffectSuite {
     }
   }
 
-  test("builtInReleaseWriteWouldChange - use the release version from the validated context") {
+  test("builtInReleaseCommitNeeded - use the release version from the validated context") {
     withInitialContextAtVersion("0.1.0") { case (_, _, initialCtx) =>
       CorePreflight
-        .builtInReleaseWriteWouldChange(
+        .builtInReleaseCommitNeeded(
           initialCtx.withVersions("0.2.0", "0.3.0-SNAPSHOT")
         )
-        .map(wouldChange => assert(wouldChange))
+        .map(commitNeeded => assert(commitNeeded))
+    }
+  }
+
+  test(
+    "builtInReleaseCommitNeeded - detect a modified version file whose bytes already match"
+  ) {
+    withInitialContext { case (_, versionFile, initialCtx) =>
+      val releaseCtx = initialCtx.withVersions("0.1.0", "0.2.0-SNAPSHOT")
+
+      IO.blocking(
+        sbt.IO.write(versionFile, """ThisBuild / version := "0.1.0"""" + "\n")
+      ) *>
+        CorePreflight
+          .builtInReleaseCommitNeeded(releaseCtx)
+          .map(commitNeeded => assert(commitNeeded))
+    }
+  }
+
+  test(
+    "builtInReleaseCommitNeeded - detect an untracked version file whose bytes already match"
+  ) {
+    ReleaseTestSupport
+      .gitRepoWithCommitResource(
+        "core-preflight-untracked-version-spec",
+        prepareRepo = repo => IO.blocking(sbt.IO.write(new File(repo, "tracked.txt"), "initial"))
+      )
+      .use { case (repo, vcs) =>
+        val versionFile = new File(repo, "version.sbt")
+
+        for {
+          _      <- IO.blocking(
+                      sbt.IO.write(
+                        versionFile,
+                        """ThisBuild / version := "0.1.0"""" + "\n"
+                      )
+                    )
+          state  <- IO.blocking(
+                      ReleaseTestSupport.gitRootState(
+                        repo,
+                        baseVersionSettings(versionFile) ++ Seq(
+                          ReleasePluginIO.autoImport.releaseIOVcsIgnoreUntrackedFiles := true
+                        )
+                      )
+                    )
+          ctx     = releaseContext(state)
+                      .withVcs(vcs)
+                      .withVersions("0.1.0", "0.2.0-SNAPSHOT")
+          needed <- CorePreflight.builtInReleaseCommitNeeded(ctx)
+        } yield assert(needed)
+      }
+  }
+
+  test(
+    "releaseCommitNeeded - agree with check mode for a staged version file whose bytes match"
+  ) {
+    withInitialContext { case (repo, versionFile, initialCtx) =>
+      val releaseCtx = initialCtx.withVersions("0.1.0", "0.2.0-SNAPSHOT")
+
+      for {
+        _               <- IO.blocking {
+                             sbt.IO.write(versionFile, """ThisBuild / version := "0.1.0"""" + "\n")
+                             TestSupport.runGit(repo, "add", "version.sbt")
+                           }
+        checkModeNeeded <- CorePreflight.builtInReleaseCommitNeeded(releaseCtx)
+        tagStepNeeded   <- TagSteps.releaseCommitNeeded(releaseCtx)
+      } yield {
+        assert(checkModeNeeded)
+        assertEquals(tagStepNeeded, checkModeNeeded)
+      }
     }
   }
 

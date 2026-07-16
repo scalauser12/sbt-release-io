@@ -23,6 +23,7 @@ import io.release.runtime.engine.ProcessStep
 import io.release.runtime.sbt.AggregatePublishTargets
 import io.release.runtime.sbt.SbtRuntime
 import io.release.runtime.workflow.StepHelpers.*
+import io.release.runtime.workflow.VersionCommitSupport
 import io.release.runtime.workflow.VersionWorkflow
 import io.release.vcs.RemoteTagProbe
 import io.release.vcs.TagConflictResolver
@@ -217,10 +218,10 @@ private[release] object TagSteps {
     )
   }
 
-  /** When the release-version write would change `version.sbt`, the release will create
-    * a new commit before tagging — so the tag's target is `FutureReleaseCommit`. When
-    * the version file already matches the resolved release version, no commit is
-    * created and the tag will be applied to the current HEAD.
+  /** When the release-version step will create a commit, the tag's target is
+    * `FutureReleaseCommit`. A commit is required when rendering changes the configured
+    * version file, or when that exact path is already modified, staged, or untracked.
+    * Only a clean tracked file that already matches the release version tags current HEAD.
     *
     * Falls back to `ExactCommit(currentHash)` when the version plan cannot be resolved
     * (minimal/custom test states without `releaseIOVersioningFile`), so the preflight
@@ -229,30 +230,37 @@ private[release] object TagSteps {
   private def tagPreflightTarget(
       ctx: ReleaseContext
   ): IO[TagConflictResolver.PreflightCommitTarget] =
-    futureReleaseCommitNeeded(ctx).flatMap {
+    releaseCommitNeeded(ctx).flatMap {
       case true  => IO.pure(TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit)
       case false => currentHashTarget(ctx)
     }
 
-  /** Returns `true` when the release will create a new commit before tagging
-    * (the version file would be written and committed), so the preflight must
+  /** Returns `true` when the release will create a new commit before tagging, so the preflight must
     * use [[TagConflictResolver.PreflightCommitTarget.FutureReleaseCommit]].
     * Returns `false` when no release version is set (preflight runs against
     * current state) or the version plan cannot be resolved (minimal/custom
     * test states without `releaseIOVersioningFile`).
     */
-  private def futureReleaseCommitNeeded(ctx: ReleaseContext): IO[Boolean] =
+  private[release] def releaseCommitNeeded(ctx: ReleaseContext): IO[Boolean] =
     ctx.releaseVersion match {
       case None                 => IO.pure(false)
       case Some(releaseVersion) =>
         resolveVersionPlanOpt(ctx).flatMap {
           case None              => IO.pure(false)
           case Some(versionPlan) =>
-            VersionWorkflow.wouldChangeVersionFile(
-              versionPlan.versionFile,
-              releaseVersion,
-              versionPlan.versionFileContents
-            )
+            for {
+              _                <- ReleaseVersionWorkflow.ensureVersionFileExists(
+                                    versionPlan.versionFile
+                                  )
+              vcs              <- VcsOps.resolveVcs(ctx)
+              relativePath     <- VcsOps.relativizeToBase(vcs, versionPlan.versionFile)
+              writeWouldChange <- VersionWorkflow.wouldChangeVersionFile(
+                                    versionPlan.versionFile,
+                                    releaseVersion,
+                                    versionPlan.versionFileContents
+                                  )
+              status           <- VersionCommitSupport.versionFileStatus(relativePath, vcs)
+            } yield status.commitNeeded(writeWouldChange)
         }
     }
 
@@ -379,7 +387,9 @@ private[release] object TagSteps {
       params: TagPlan,
       tagName: String
   ): IO[ReleaseContext] = IO.blocking {
-    // Scope the manifest tag to every project that `runAggregated` will publish.
+    // Scope the manifest tag to every project reached by the aggregate publish graph.
+    // Publish execution later filters that graph by `publish / skip`, so this is a safe
+    // superset of the selected actions that may emit artifacts.
     // Same rationale as `commit-release-version` for the release hash: an unscoped
     // setting only applies to the root currentRef, leaving aggregated child
     // artifacts with `releaseIOInternalReleaseTag = None` and no `Vcs-Release-Tag`

@@ -8,6 +8,7 @@ import io.release.ReleasePluginIO
 import io.release.TestSupport
 import io.release.core.internal.CoreStepAliases.Step
 import io.release.core.internal.steps.PublishSteps
+import io.release.runtime.sbt.SbtRuntime
 import munit.CatsEffectSuite
 import sbt.*
 import sbt.Keys.*
@@ -338,6 +339,85 @@ class CoreLifecycleCompilationSpec extends CatsEffectSuite {
             events,
             List("validate-before", "validate-after")
           )
+        }
+      }
+    }
+  }
+
+  test(
+    "compile - checks-disabled publish hooks follow skipped-to-eligible execute drift"
+  ) {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val settings = publishHookSettings(observed) ++ Seq(
+        ReleasePluginIO.autoImport.releaseIOPublishChecks := false,
+        publish / skip                                    := Def.task {
+          sbt.IO.append(baseDirectory.value / "publish-skip-validation-probes", "ran\n")
+          true
+        }.value
+      )
+
+      hookStateResource("release-hook-compiler-checks-disabled-live-gate", settings).use { state =>
+        val skippedCtx = ReleaseContext(state = state, skipPublish = false)
+
+        compileLifecycle(state).flatMap { steps =>
+          val publishHookSteps = publishHookStepsOnly(steps)
+          for {
+            validatedCtx <- validatePublishHooks(publishHookSteps, skippedCtx)
+            probeFile     = SbtRuntime
+                              .extracted(validatedCtx.state)
+                              .get(baseDirectory) / "publish-skip-validation-probes"
+            _             = assert(
+                              !probeFile.exists(),
+                              "checks-disabled hook validation evaluated publish / skip"
+                            )
+            driftedState  = TestSupport.appendSessionSettings(
+                              validatedCtx.state,
+                              Seq(publish / skip := false)
+                            )
+            executeCtx    = simulatePublishExecuted(validatedCtx.withState(driftedState))
+            _            <- executePublishHooks(publishHookSteps, executeCtx)
+            events       <- observed.get
+          } yield assertEquals(
+            events,
+            List("validate-before", "validate-after", "execute-before", "execute-after")
+          )
+        }
+      }
+    }
+  }
+
+  test("compile - suppress publish hooks for an aggregate target introduced after validation") {
+    Ref.of[IO, List[String]](Nil).flatMap { observed =>
+      val rootSettings = publishHookSettings(observed) ++ Seq(
+        version                                                            := "1.0.0",
+        ReleasePluginIO.autoImport.releaseIOPublishChecks                  := true,
+        ReleasePluginIO.autoImport.releaseIOPublishAction / Keys.aggregate := false
+      )
+
+      multiProjectHookStateResource(
+        "release-hook-compiler-new-publish-target",
+        rootSettings = rootSettings,
+        childSettings = Seq(version := "1.0.0", publish / skip := false)
+      ).use { state =>
+        val ctx = ReleaseContext(state = state, skipPublish = false)
+
+        compileLifecycle(state).flatMap { steps =>
+          val publishHookSteps = publishHookStepsOnly(steps)
+          for {
+            validatedCtx <- validatePublishHooks(publishHookSteps, ctx)
+            driftedState  =
+              TestSupport.appendSessionSettings(
+                validatedCtx.state,
+                Seq(
+                  ReleasePluginIO.autoImport.releaseIOPublishAction / Keys.aggregate := true
+                )
+              )
+            _            <- executePublishHooks(
+                              publishHookSteps,
+                              validatedCtx.withState(driftedState)
+                            )
+            events       <- observed.get
+          } yield assertEquals(events, List("validate-before", "validate-after"))
         }
       }
     }

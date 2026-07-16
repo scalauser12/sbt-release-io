@@ -1,0 +1,9 @@
+target/
+project/target/
+project/project/
+child/target/
+*.class
+*.log
+global/
+publish-target/
+*.marker

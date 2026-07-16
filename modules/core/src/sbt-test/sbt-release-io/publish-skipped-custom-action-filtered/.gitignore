@@ -1,0 +1,10 @@
+target/
+project/target/
+project/project/
+eligible/target/
+skipped/target/
+*.class
+*.log
+*.marker
+test
+global/

@@ -283,7 +283,7 @@ object ReleasePluginIOAutoImport {
   lazy val releaseIOPublishChecks: SettingKey[Boolean] =
     SettingKey[Boolean](
       "releaseIOPublishChecks",
-      "Whether to run publishTo validation checks for the publish step"
+      "Whether to validate aggregate publish eligibility, versions, and publishTo before execution"
     )
 
   // ── Runtime keys ────────────────────────────────────────────────────

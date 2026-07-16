@@ -78,7 +78,7 @@ only when `default-push-answer` and `releaseIODefaultsPushAnswer` are both unset
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |
 | `releaseIOVersioningFile` | `File` | `baseDirectory / "version.sbt"` | Path to the version file |
-| `releaseIOVersioningUseGlobal` | `Boolean` | `true` | Read/write `ThisBuild / version` instead of project-scoped `version` |
+| `releaseIOVersioningUseGlobal` | `Boolean` | `true` | Apply version updates at `ThisBuild / version` instead of project-scoped `version`; aggregated publish targets must still match the single core release version |
 | `releaseIOVersioningReadVersion` | `File => IO[String]` | parses `version := "x.y.z"` | Read a version from the version file |
 | `releaseIOVersioningFileContents` | `(File, String) => IO[String]` | writes `ThisBuild / version := "x.y.z"`, or `version := "x.y.z"` when `releaseIOVersioningUseGlobal` is `false` | Produce version-file contents for a new version |
 | `releaseIOVersioningBump` | `Version.Bump` | `Next` | Version bump strategy |
@@ -102,8 +102,27 @@ only when `default-push-answer` and `releaseIODefaultsPushAnswer` are both unset
 
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |
-| `releaseIOPublishAction` | `Unit` | `publish.value` | Task that performs the publish |
-| `releaseIOPublishChecks` | `Boolean` | `true` | Validate `publishTo` / `skip` before publish |
+| `releaseIOPublishAction` | `Unit` | `publish.value` | Task run for each eligible target selected from its aggregate graph |
+| `releaseIOPublishChecks` | `Boolean` | `true` | Validate aggregate eligibility, versions, and `publishTo` before release execution |
+
+The core command releases one version. Every non-skipped project reached through
+`releaseIOPublishAction` aggregation must have that effective version; use the monorepo plugin
+when aggregate children need independent versions.
+
+The publish step evaluates `publish / skip` for every aggregate target, then runs only the eligible
+scoped `releaseIOPublishAction` tasks in one selected sbt task graph. A skipped child therefore does
+not run a custom publish action even when that action does not consult `publish / skip` itself.
+Only aggregate action roots are filtered: an explicit dependency on another project's task inside
+an eligible custom action remains part of that action's task graph.
+
+When `releaseIOPublishChecks` is `true`, skip eligibility, destinations, and aggregate versions are
+validated before release mutations, so mismatches visible then fail early. When it is `false`,
+those upfront probes are disabled and `publish / skip` is evaluated live immediately before
+publish. The execute-time aggregate-version guard is always enforced: disabling checks cannot
+authorize independently versioned children, and version drift after checked validation is still
+caught. A mismatch detected at this late boundary can leave the release commit and tag in place.
+Before-publish hooks may already have run, but no selected `releaseIOPublishAction` runs for the
+rejected aggregate/cross iteration; earlier cross iterations may already have published.
 
 ## Diagnostics and runtime
 

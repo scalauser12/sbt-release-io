@@ -18,6 +18,7 @@ import sbt.Project
 import sbt.State
 
 import java.io.File
+import java.nio.file.NoSuchFileException
 
 class VersionWorkflowSpec extends CatsEffectSuite {
 
@@ -39,6 +40,39 @@ class VersionWorkflowSpec extends CatsEffectSuite {
       assertFailure[IllegalStateException, Unit](
         VersionWorkflow.ensureVersionFileExists(missing, "custom missing message")
       )(err => assertEquals(err.getMessage, "custom missing message"))
+    }
+  }
+
+  test("writeVersionFile does not create a missing version file") {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      val missing = new File(dir, "missing-version.sbt")
+
+      assertFailure[NoSuchFileException, Unit](
+        VersionWorkflow.writeVersionFile(
+          missing,
+          "1.0.0",
+          (_, version) => IO.pure(s"""version := "$version"""" + "\n")
+        )
+      )(_ => assert(!missing.exists(), "writeVersionFile must not create an unvalidated path"))
+    }
+  }
+
+  test("writeVersionFile does not recreate a file removed while rendering contents") {
+    TestSupport.tempDirResource(fixturePrefix).use { dir =>
+      val versionFile = new File(dir, "version.sbt")
+
+      IO.blocking(sbt.IO.write(versionFile, "version := \"0.1.0-SNAPSHOT\"\n")) *>
+        assertFailure[NoSuchFileException, Unit](
+          VersionWorkflow.writeVersionFile(
+            versionFile,
+            "1.0.0",
+            (file, version) =>
+              IO.blocking {
+                sbt.IO.delete(file)
+                s"""version := "$version"""" + "\n"
+              }
+          )
+        )(_ => assert(!versionFile.exists(), "a concurrently removed file must stay absent"))
     }
   }
 

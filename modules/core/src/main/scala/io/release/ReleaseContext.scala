@@ -1,6 +1,7 @@
 package io.release
 
 import io.release.core.internal.CoreExecutionState
+import io.release.core.internal.CorePublishState
 import io.release.runtime.ExecutionFlags
 import io.release.runtime.ReleaseCtx
 import io.release.runtime.ReleaseDecisionDefaults
@@ -45,8 +46,11 @@ case class ReleaseContext(
 
   override def withState(s: State): ReleaseContext = copy(state = s)
 
-  /** Set the release and next version pair, updating both the context field
-    * and the sbt State attribute so that sbt tasks can read the versions.
+  /** Set an already-resolved release and next version pair, updating both the context
+    * field and the sbt State attribute so that sbt tasks can read the versions.
+    * Explicit pairs installed by hooks or custom contexts are preserved by
+    * `inquire-versions` without re-running the version resolver tasks. Internal
+    * validate-time tentative pairs are cleared before release execution.
     */
   def withVersions(release: String, next: String): ReleaseContext =
     copy(
@@ -94,6 +98,28 @@ case class ReleaseContext(
     */
   private[release] def pushConfigured: Boolean =
     executionState.fold(true)(_.pushConfigured)
+
+  private[release] def corePublishState: CorePublishState =
+    metadata(CorePublishState.metadataKey).getOrElse(CorePublishState.empty)
+
+  private[release] def withCorePublishState(value: CorePublishState): ReleaseContext =
+    withMetadata(CorePublishState.metadataKey, value)
+
+  private[release] def hasChecksEnabledPublishBatch: Boolean =
+    corePublishState.hasChecksEnabledBatch
+
+  private[release] def publishValidationBatch(
+      key: String
+  ): Option[CorePublishState.PublishValidationBatch] =
+    corePublishState.batch(key)
+
+  private[release] def recordPublishValidationBatch(
+      batch: CorePublishState.PublishValidationBatch
+  ): ReleaseContext =
+    withCorePublishState(corePublishState.recordBatch(batch))
+
+  private[release] def completePublishTargetValidation(key: String): ReleaseContext =
+    withCorePublishState(corePublishState.completeTargetValidation(key))
 
   /** Mark `versions` as a tentative seed installed by
     * `validateInquireVersionsWithContext`. The marker is consumed by

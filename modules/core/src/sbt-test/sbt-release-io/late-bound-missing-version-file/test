@@ -1,0 +1,15 @@
+# Initialize git repository
+$ exec git init
+$ exec git config user.email "test@example.com"
+$ exec git config user.name "Test User"
+$ exec git add .gitignore build.sbt version.sbt project/plugins.sbt
+$ exec git commit -m "Initial commit"
+$ exec git update-ref refs/test/initial-head HEAD
+
+# The initial version file passes validation and version resolution. A later hook
+# redirects the write phase to a nonexistent path, which must be rejected without
+# implicitly creating and committing that file.
+-> releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
+
+$ absent version-typo.sbt
+> checkRepositoryUnchanged

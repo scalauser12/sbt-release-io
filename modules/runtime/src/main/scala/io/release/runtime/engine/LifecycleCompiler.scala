@@ -46,12 +46,20 @@ private[release] object LifecycleCompiler {
     *   (cross-build, per-project). When `None`, the gate is streaming (re-evaluated each
     *   call). For cross-build iterations, fold `scalaVersion` into the key so each
     *   iteration gets its own frozen decision.
+    * @param freezeGateValidation optional effectful override that resolves an updated context,
+    *   cache key, and gate decision together during validation. The updated context is returned
+    *   even for a false decision. Execute still reads the key produced by `freezeGateKey`. When
+    *   absent, validation evaluates `freezeGateKey` and `gate` separately as before.
     * @param narrowExecute optional execute-time predicate AND'd with `gate` (or, when
     *   `freezeGateKey` is set, with the cached validate-time gate decision). Lets a phase
     *   use the validate-time gate as an upper bound while further gating execution on a
     *   runtime signal the validate phase cannot observe (e.g. "did the publish task
     *   actually run?", "did the push actually go through?"). Validation is unaffected,
     *   preserving the validate-before-execute contract.
+    * @param narrowOnMissingFrozenGate when `true` and `freezeGateKey` is set, an absent cached
+    *   decision may be suppressed only when `narrowExecute` returns `false`. Cached `false`
+    *   decisions skip without evaluating the narrow; cached `true` decisions evaluate the
+    *   narrow normally. If the narrow returns `true`, the missing-decision invariant still fails.
     */
   def singleHookPhase[Config, C, I, Hook](
       phase: String,
@@ -63,8 +71,10 @@ private[release] object LifecycleCompiler {
       validateOf: Hook => C => IO[Unit],
       crossBuild: Boolean = false,
       freezeGateKey: Option[C => String] = None,
+      freezeGateValidation: Option[C => IO[FrozenGateValidation[C]]] = None,
       enabled: Config => Boolean = (_: Config) => true,
-      narrowExecute: Option[C => IO[Boolean]] = None
+      narrowExecute: Option[C => IO[Boolean]] = None,
+      narrowOnMissingFrozenGate: Boolean = false
   ): Phase[Config, C, I] = {
     val trackedExecuteOf =
       executeTrackedOf.getOrElse((hook: Hook) => TrackedContextHandle.lift(executeOf(hook)))
@@ -78,7 +88,9 @@ private[release] object LifecycleCompiler {
             hooks = resolveHooks(config),
             gate = gate,
             gateMode = freezeGateKey,
-            narrowExecute = narrowExecute
+            validateGate = freezeGateValidation,
+            narrowExecute = narrowExecute,
+            narrowOnMissingFrozenGate = narrowOnMissingFrozenGate
           )(
             nameOf = nameOf,
             executeOf = executeOf,
@@ -192,7 +204,9 @@ private[release] object LifecycleCompiler {
       hooks: Seq[Hook],
       gate: C => IO[Boolean],
       gateMode: Option[C => String],
-      narrowExecute: Option[C => IO[Boolean]]
+      validateGate: Option[C => IO[FrozenGateValidation[C]]],
+      narrowExecute: Option[C => IO[Boolean]],
+      narrowOnMissingFrozenGate: Boolean
   )(
       nameOf: Hook => String,
       executeOf: Hook => C => IO[C],
@@ -223,10 +237,22 @@ private[release] object LifecycleCompiler {
         case Some(stableGateKey) =>
           val narrowedExecute        = applyNarrow(executeOf(hook))
           val narrowedExecuteTracked = applyNarrowTracked(executeTrackedOf(hook))
+          val narrowIfMissing        =
+            if (narrowOnMissingFrozenGate) narrowExecute else None
 
           frozenGateFunctions[C, C](
-            gate,
-            stableGateKey,
+            gate = gate,
+            gateKey = stableGateKey,
+            validateGate = validateGate.map { resolve => ctx =>
+              resolve(ctx).map { resolved =>
+                ResolvedFrozenGate(
+                  args = resolved.context,
+                  key = resolved.key,
+                  decision = resolved.decision
+                )
+              }
+            },
+            narrowIfMissing = narrowIfMissing,
             execute = narrowedExecute,
             executeTracked = (handle, _) => narrowedExecuteTracked(handle),
             validate = ctx => validateOf(hook)(ctx).as(ctx),
