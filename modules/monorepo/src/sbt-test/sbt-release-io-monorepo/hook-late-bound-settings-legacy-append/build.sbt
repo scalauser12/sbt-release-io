@@ -8,6 +8,7 @@ import _root_.io.release.monorepo.MonorepoProjectHookIO
 // Regression: a `before-version-resolution` hook that uses the legacy
 // `Extracted.appendWithSession` to install late-bound monorepo version-file
 // resolvers must keep those resolvers visible across every project's write.
+// A later hook changes the target to a second, pre-existing version file.
 // `writeProjectVersion`'s trailing `appendSessionSettings` rebuilds the
 // structure from `session.mergeSettings` (which excludes `appendWithSession`
 // overlays); without the lift, only the FIRST selected project's write sees
@@ -127,7 +128,7 @@ lazy val root = (project in file("."))
       // The promoted resolver retains both the non-definitive project update
       // and its delegated ThisBuild base: release versions land in
       // version.properties, then the post-write hook changes the base and next
-      // versions land in next-version.properties.
+      // versions overwrite the pre-existing next-version.properties files.
       assertProject("core", "1.0.0", "1.1.0-SNAPSHOT")
       assertProject("api", "2.0.0", "2.1.0-SNAPSHOT")
     }

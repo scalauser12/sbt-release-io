@@ -284,6 +284,14 @@ private[monorepo] object MonorepoVersionWorkflow {
         runtime      <- IO.blocking(MonorepoRuntime.fromState(ctx.state))
         _            <- validateDistinctVersionFiles(runtime)
         versionInputs = MonorepoVersionFiles.resolveInputs(runtime, project.ref)
+        _            <- VersionWorkflow.ensureVersionFileExists(
+                          versionInputs.versionFile,
+                          missingVersionFileMessage(
+                            project,
+                            versionInputs.versionFile,
+                            includeConfigurationGuidance = false
+                          )
+                        )
         vcs          <- VcsOps.resolveVcs(ctx)
         _            <- validateSelectedVersionFileUnderVcsRoot(
                           vcs,
@@ -291,8 +299,8 @@ private[monorepo] object MonorepoVersionWorkflow {
                           versionInputs.versionFile,
                           includeSelectedMarker = false
                         )
-        // Re-check the gitignore status against the freshly resolved per-project version
-        // file. A before-version-resolution hook can install a late-bound
+        // Re-check the VCS path and gitignore status against the freshly resolved
+        // per-project version file. A before-version-resolution hook can install a late-bound
         // `releaseIOMonorepoVersioningFile` via session settings after
         // `inquireVersions.validate` ran, so the validate-time probe in
         // [[validateInquireVersions]] cannot see the final value. Running the check here
@@ -310,10 +318,11 @@ private[monorepo] object MonorepoVersionWorkflow {
     * memoized on [[MonorepoContext]] via `markValidated`. The flag travels with the context, so
     * a hook that mutates state via `ctx.withState(...)` after prevalidation will keep the cached
     * decision. The execute path remains authoritative: `writeVersionFromPair` re-runs
-    * `validateDistinctVersionFiles`, `validateSelectedVersionFileUnderVcsRoot`, and
-    * `assertVersionFileNotIgnored` per project before the on-disk write, so a late-bound
-    * `releaseIOMonorepoVersioningFile` change still fails the release — at execute time rather
-    * than validate time, with worse UX but no loss of safety.
+    * `validateDistinctVersionFiles`, `ensureVersionFileExists`,
+    * `validateSelectedVersionFileUnderVcsRoot`, and `assertVersionFileNotIgnored` per project
+    * before the on-disk write, so a late-bound `releaseIOMonorepoVersioningFile` change still
+    * fails the release — at execute time rather than validate time, with worse UX but no loss
+    * of safety.
     */
   private def validateWritePhase(
       ctx: MonorepoContext,
