@@ -11,14 +11,19 @@ plus the shared settings most relevant to the monorepo flow. For the full shared
 catalog, see the [core settings reference](../core/reference.md).
 
 > **Coming from sbt-release?** The original plugin enables interactive prompts by default.
-> This plugin defaults to `releaseIOMonorepoBehaviorInteractive := false` — decision points
-> that have no configured answer **fail fast** instead of prompting.
+> This plugin defaults to `releaseIOMonorepoBehaviorInteractive := false`, so it never prompts:
+> version inputs use their computed suggestions when they have no override, and an unanswered
+> push decision skips the push. Safety decisions that require explicit consent — such as
+> snapshot dependencies, tag conflicts, remote-check failures, or a branch behind its upstream —
+> abort when no answer is configured.
 >
 > You have two options:
 > - `releaseIOMonorepoBehaviorInteractive := true` — re-enable interactive prompts for
 >   versions, confirmation, and push decisions.
-> - `with-defaults` CLI flag — auto-accept safe built-in defaults without prompting
->   and without enabling interactive mode. Useful for CI.
+> - `with-defaults` CLI flag — choose the built-in defaults without prompting and without
+>   enabling interactive mode. This uses computed versions and enables push, but blocking
+>   conditions still default to abort unless their corresponding `default-*` answer is
+>   configured explicitly. Useful for CI.
 >
 > The two can be combined: when both are active, `with-defaults` pre-answers prompts
 > that would otherwise appear.

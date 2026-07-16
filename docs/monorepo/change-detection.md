@@ -15,9 +15,12 @@ The plugin detects which projects have changed since their last release tag usin
    output, so paths arrive unquoted regardless of `core.quotePath`; no path arguments cross
    the process boundary), then filter the result down to files under each project's
    directory in Scala.
-4. Filter out each project's own version file and any files or directories in
+4. Filter out each project's own version file, any files or directories in
    `releaseIOMonorepoDetectionExcludes` (see [Excluding files or directories from
-   detection](#excluding-files-or-directories-from-detection)).
+   detection](#excluding-files-or-directories-from-detection)), and directories owned by
+   loaded projects that are strict descendants of the project. For example, a change under
+   `services/api/` counts for the `api` project but does not also mark its parent project at
+   `services/` as changed.
 5. If any significant files remain, the project is changed.
 
 If any path in `releaseIOMonorepoDetectionSharedPaths` (see below) has changed since

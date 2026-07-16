@@ -7,7 +7,10 @@
 - **Better error handling**: Graceful failure handling with the IO monad
 - **Cross-build support**: Run both validation and execution phases across multiple Scala versions
 - **Resource-safe custom plugins**: Acquire shared resources (HTTP clients, temp dirs, etc.) once for the entire release with guaranteed cleanup via `Resource[IO, T]`
-- **Non-interactive by default**: Interactive prompts are disabled by default for CI safety. Set `releaseIOBehaviorInteractive := true` to re-enable guided prompts — see [Behavior settings](reference.md#behavior-settings)
+- **Non-interactive by default**: Suggested versions are accepted automatically, blocking safety
+  checks abort, and push is skipped unless a decision default or `with-defaults` says otherwise.
+  Set `releaseIOBehaviorInteractive := true` to re-enable guided prompts — see
+  [Behavior settings](reference.md#behavior-settings)
 - **Configurable**: Settings for commit messages, GPG signing, version bumping, and publish gating
 
 > **Note:** This plugin supports Git only. If your project uses Mercurial or Subversion, see [sbt-release](https://github.com/sbt/sbt-release).
@@ -55,7 +58,14 @@ Run the release (versions computed from `version.sbt`):
 sbt "releaseIO with-defaults"
 ```
 
-`with-defaults` strips `-SNAPSHOT` to produce the release version (e.g. `0.1.0-SNAPSHOT` → `0.1.0`) and bumps the bugfix component for the next snapshot (→ `0.1.1-SNAPSHOT`). To bump a different component, set `releaseIOVersioningBump` (see [Version bump types](reference.md#version-bump-types)), or pass `release-version` / `next-version` to override explicitly. If a release fails mid-way, see [Recovery and rollback](operations.md#recovery-and-rollback).
+Default version resolution strips `-SNAPSHOT` to produce the release version (for example,
+`0.1.0-SNAPSHOT` → `0.1.0`) and bumps the bugfix component for the next snapshot
+(→ `0.1.1-SNAPSHOT`). Non-interactive runs accept those suggested versions even without
+`with-defaults`; that flag supplies the built-in answers for the other release decisions,
+including opting in to push. To bump a different component, set `releaseIOVersioningBump`
+(see [Version bump types](reference.md#version-bump-types)), or pass `release-version` /
+`next-version` to override explicitly. If a release fails mid-way, see
+[Recovery and rollback](operations.md#recovery-and-rollback).
 
 Or specify versions explicitly:
 

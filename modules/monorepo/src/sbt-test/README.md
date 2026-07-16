@@ -42,7 +42,7 @@ Global version mode and unified tag strategy were removed. The normal supported 
 Run the monorepo scripted suite on sbt 1:
 
 ```bash
-sbt monorepo/scripted
+sbt --server --sbt-version 1.12.3 monorepo/scripted
 ```
 
 Run the monorepo scripted suite on sbt 2:
@@ -54,7 +54,7 @@ Run the monorepo scripted suite on sbt 2:
 Run a specific scenario on sbt 1:
 
 ```bash
-sbt "monorepo/scripted sbt-release-io-monorepo/simple-monorepo"
+sbt --server --sbt-version 1.12.3 "monorepo/scripted sbt-release-io-monorepo/simple-monorepo"
 ```
 
 Run a specific scenario on sbt 2:
@@ -66,7 +66,7 @@ Run a specific scenario on sbt 2:
 Run multiple scenarios on sbt 1:
 
 ```bash
-sbt "monorepo/scripted sbt-release-io-monorepo/simple-monorepo sbt-release-io-monorepo/tag-exists-error"
+sbt --server --sbt-version 1.12.3 "monorepo/scripted sbt-release-io-monorepo/simple-monorepo sbt-release-io-monorepo/tag-exists-error"
 ```
 
 Run multiple scenarios on sbt 2:

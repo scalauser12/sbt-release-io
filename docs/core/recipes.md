@@ -54,7 +54,10 @@ releaseIOHooksBeforePublish += ReleaseHookIO.sideEffect("verify-publish-env") { 
 
 ## CI/CD integration
 
-The plugin defaults to non-interactive mode (`releaseIOBehaviorInteractive := false`), so it works in CI without extra configuration. Pass `with-defaults` to accept the computed release/next versions without confirmation, and supply versions explicitly:
+The plugin defaults to non-interactive mode (`releaseIOBehaviorInteractive := false`). Suggested
+release and next versions are accepted automatically, blocking safety checks abort when they need
+a decision, and an unconfigured push is skipped. For a predictable CI release, supply versions
+explicitly and pass `with-defaults` to apply the built-in decisions, including opting in to push:
 
 ```bash
 sbt "releaseIO with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
@@ -82,14 +85,22 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0  # avoid false positives in the behind-remote check on shallow clones
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
+          cache: sbt
+      - uses: sbt/setup-sbt@v1
+      - name: Configure Git author
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
       - name: Release
         env:
           RELEASE_VERSION: ${{ github.event.inputs.version }}
@@ -97,6 +108,11 @@ jobs:
         run: |
           sbt "releaseIO with-defaults release-version $RELEASE_VERSION next-version $NEXT_VERSION"
 ```
+
+This example uses `GITHUB_TOKEN` (persisted by `actions/checkout`) for the Git push only. Configure
+`publishTo` in the project and expose the repository-specific publishing credentials expected by
+your build, typically as encrypted GitHub secrets passed to the `Release` step. The
+`contents: write` permission does not grant access to Maven Central or another artifact repository.
 
 For the full list of CLI flags and subcommands, see [Settings reference — CLI](reference.md#cli).
 

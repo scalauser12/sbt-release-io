@@ -24,10 +24,11 @@ sbt --server --sbt-version 1.12.3 compile
 sbt --server --sbt-version 1.12.3 test
 ```
 
-**Note:** Prefer `./bin/sbt2-clean ...` for local sbt 2 work. It runs from a clean tracked
-snapshot, which avoids interference from IDE-generated files such as `project/metals.sbt`
-or `.bloop/`. Plain `sbt ...` uses sbt 2.0.0 from `project/build.properties`; use the direct
-lane only when needed or from a known-clean checkout/CI environment.
+**Note:** Prefer `./bin/sbt2-clean ...` for local sbt 2 work. It copies the current working tree
+to a temporary directory while filtering known generated IDE/build files such as
+`project/metals.sbt` and `.bloop/`; non-excluded untracked files are included. Plain `sbt ...`
+uses sbt 2.0.0 from `project/build.properties`; use the direct lane only when needed or from a
+known-clean checkout/CI environment.
 
 ### Verification Expectations
 
@@ -52,7 +53,7 @@ sbt scalafmtSbtCheck       # check sbt/build file formatting
 ```
 modules/
 ├── core/                                     # io.release, io.release.core.internal
-│   ├── src/main/scala/io/release/            # Public API: ReleasePluginIO, ReleaseContext, ReleaseHookIO, ReleaseResourceHookIO, ReleaseComposer, VcsOps
+│   ├── src/main/scala/io/release/            # Public API: ReleasePluginIO, ReleasePluginIOLike, ReleaseContext, hook/resource-hook types
 │   ├── src/main/scala/io/release/core/internal/  # CoreLifecycle, CoreCommandExecution, CoreDefaultSettings, steps/
 │   ├── src/test/scala/                       # Unit tests (MUnit)
 │   ├── src/sbt-test/sbt-release-io/          # 70+ scripted integration tests
@@ -64,7 +65,7 @@ modules/
 │   ├── src/sbt-test/sbt-release-io-monorepo/ # 90+ scripted tests
 │   └── examples/                             # Example code
 ├── runtime/                                  # io.release, io.release.runtime, io.release.vcs, io.release.version
-│   └── src/main/scala/                       # Engine, shared key ownership, VCS adapter, version model
+│   └── src/main/scala/                       # Engine, shared keys, internal VcsOps, VCS adapter, version model
 └── testkit/                                  # io.release
     └── src/main/scala/                       # TestAssertions, TestSupport, TestRepoFiles
 docs/
@@ -84,10 +85,10 @@ Contributor-oriented overview (modules, command flow, glossary): [docs/ARCHITECT
 | `core/ReleaseContext.scala` | Immutable context threaded through steps (versions, vcs, state, metadata) |
 | `core/ReleaseHookIO.scala` | Hook case class for lifecycle customization |
 | `core/ReleaseResourceHookIO.scala` | Resource-lifecycle hook for acquire/release around the run |
-| `core/ReleaseComposer.scala` | Composes policies + hooks into the core release sequence |
+| `core/ReleaseComposer.scala` | Internal (`private[release]`) policy/hook composition for the core release sequence |
 | `core/internal/CoreLifecycle.scala` | Wires core policy/hook settings to the shared lifecycle compiler |
 | `core/internal/CoreCommandExecution.scala` | Core command preparation, planning, and release/check orchestration |
-| `core/internal/steps/ReleaseSteps.scala` | Facade re-exporting the 14 built-in step values; the implementations live in sibling files: `VcsSteps.scala` (initialize-vcs, check-clean, push-changes), `TagSteps.scala` (tag-preflight, tag-release), `VersionSteps.scala` / `ReleaseVersionWorkflow.scala` (inquire/set/commit version), `PublishSteps.scala` (check-snapshot-deps, publish-artifacts, run-tests, run-clean). All `private[release]`. |
+| `core/internal/steps/` | The 14 built-in step values live in `VcsSteps.scala` (initialize-vcs, check-clean, push-changes), `TagSteps.scala` (tag-preflight, tag-release), `VersionSteps.scala` (inquire/set/commit version), and `PublishSteps.scala` (check-snapshot-deps, publish-artifacts, run-tests, run-clean). `ReleaseVersionWorkflow.scala` provides the supporting version mechanics. All are `private[release]`. |
 
 ### Monorepo Module
 
@@ -120,6 +121,7 @@ Contributor-oriented overview (modules, command flow, glossary): [docs/ARCHITECT
 | `ReleaseSharedDefaultSettingsSupport.scala` | Runtime-owned shared default-setting logic reused by internal workflows and plugin setup |
 | `runtime/workflow/VersionWorkflow.scala` | Default version-file IO and publish validation helpers |
 | `runtime/sbt/AggregatePublishTargets.scala` | Resolves the project refs that `runAggregated` will fan out to for a given task key (mirrors sbt's aggregation expansion); reused by core publish/commit/tag and shareable with monorepo |
+| `VcsOps.scala` | Internal (`private[release]`) VCS workflow helpers shared by core and monorepo |
 | `vcs/Git.scala` | Git VCS adapter with `IO.blocking` wrappers |
 | `version/Version.scala` | Version model |
 
@@ -170,7 +172,7 @@ helpers, but build-facing customization should use hooks, policies, and resource
 ## Dependencies
 
 - `cats-effect 3.7.0` — async/resource management
-- `munit 1.2.4` + `munit-cats-effect 2.2.0` — testing
+- `munit 1.3.0` + `munit-cats-effect 2.2.0` — testing
 - `sbt-scalafmt 2.5.6` — formatting
 - `sbt-ci-release 1.11.2` — Maven Central publishing
 

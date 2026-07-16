@@ -310,6 +310,20 @@ object MyMonorepoRelease extends MonorepoReleasePluginLike[HttpClient] {
 }
 ```
 
+Because this custom plugin uses `noTrigger`, enable it explicitly on the root project:
+
+```scala
+lazy val root = (project in file("."))
+  .aggregate(core, api)
+  .enablePlugins(MyMonorepoRelease)
+```
+
+Then invoke the custom command named by `commandName`:
+
+```bash
+sbt "releaseMonorepoCustom core api with-defaults"
+```
+
 Notes:
 
 - `check` never acquires the resource and validates only resource-aware hook phases whose

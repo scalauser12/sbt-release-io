@@ -29,8 +29,8 @@ libraryDependencies ++= Seq(
 ```
 
 Example: upload a single Scala-version-agnostic release archive to an artifact service after
-the rest of the release has finished. Because it's a single, version-agnostic upload, attach
-it to `releaseIOHooksAfterPush` rather than `afterPublish` (see the cross-build gotcha below):
+the next-version commit. Because it is a single, version-agnostic upload, attach it to
+`releaseIOHooksAfterNextCommit` rather than `afterPublish` (see the cross-build gotcha below):
 
 ```scala
 import _root_.cats.effect.IO
@@ -63,7 +63,7 @@ def uploadArchive(ctx: ReleaseContext): IO[Unit] =
       IO.raiseError(new RuntimeException("releaseVersion is not set"))
   }
 
-releaseIOHooksAfterPush += ReleaseHookIO.sideEffect("upload-archive")(uploadArchive)
+releaseIOHooksAfterNextCommit += ReleaseHookIO.sideEffect("upload-archive")(uploadArchive)
 ```
 
 **Cross-build gotcha:** `releaseIOHooksBeforePublish` and `releaseIOHooksAfterPublish` are the
@@ -71,6 +71,10 @@ only hook slots that inherit cross-build iteration. With `releaseIOBehaviorCross
 hooks in these slots run **once per Scala version** in `crossScalaVersions`. Use them when
 your side effect is per Scala version (uploading a per-version artifact, notifying per-version
 consumers). For side effects that should run exactly once per release (a Scala-version-agnostic
-archive like the example above, a single release notification), attach to a non-cross-built
-slot such as `releaseIOHooksAfterTag`, `releaseIOHooksAfterNextCommit`, or
-`releaseIOHooksAfterPush`.
+archive like the example above, a single release notification), attach to the unconditional,
+non-cross-built `releaseIOHooksAfterNextCommit` slot.
+
+`releaseIOHooksAfterPush` is also non-cross-built, but it runs only when `push-changes` actually
+updates the remote. Disabling push, declining it, or leaving it unanswered in non-interactive mode
+suppresses that hook; use `releaseIOHooksAfterNextCommit` when the action must run regardless of
+the push decision.

@@ -3,7 +3,10 @@
 [![Maven Central (sbt 1 / Scala 2.12)](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io_2.12_1.0?label=sbt%201%20%2F%20Scala%202.12)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io_2.12_1.0)
 [![Maven Central (sbt 2 / Scala 3)](https://img.shields.io/maven-central/v/io.github.scalauser12/sbt-release-io_sbt2_3?label=sbt%202%20%2F%20Scala%203)](https://central.sonatype.com/artifact/io.github.scalauser12/sbt-release-io_sbt2_3)
 
-Drop-in replacement for [sbt-release](https://github.com/sbt/sbt-release) rebuilt on cats-effect IO, with hook-based customization, cross-build validation, and `Resource`-safe lifecycle management.
+An alternative to [sbt-release](https://github.com/sbt/sbt-release), rebuilt on cats-effect IO
+with hook-based customization, cross-build validation, and `Resource`-safe lifecycle management.
+The lifecycle is familiar, but the customization API and non-interactive defaults intentionally
+differ; see the [execution-model comparison](concepts.md#execution-model-sbt-release-io-vs-sbt-release).
 
 ## Start
 

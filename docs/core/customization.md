@@ -265,6 +265,18 @@ object MyReleasePlugin extends ReleasePluginIOLike[HttpClient] {
 }
 ```
 
+Because the custom plugin uses `noTrigger`, enable it explicitly in `build.sbt`:
+
+```scala
+enablePlugins(MyReleasePlugin)
+```
+
+Its overridden command name is then available as a normal sbt command:
+
+```bash
+sbt "releaseWithClient with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
+```
+
 Notes:
 
 - **Check mode and resources:** `check` runs every hook's `validate` function but never

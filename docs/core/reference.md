@@ -10,14 +10,16 @@ In `.scala` build sources under `project/`, import grouped keys from
 `autoImport` — no import needed.
 
 > **Coming from sbt-release?** The original plugin enables interactive prompts by default.
-> This plugin defaults to `releaseIOBehaviorInteractive := false` — decision points that
-> have no configured answer **fail fast** instead of prompting.
+> This plugin defaults to `releaseIOBehaviorInteractive := false`: suggested release and next
+> versions are accepted automatically, blocking safety checks abort when they need a decision,
+> and push is skipped when it has no configured answer.
 >
 > You have two options:
 > - `releaseIOBehaviorInteractive := true` — re-enable interactive prompts for versions,
 >   confirmation, and push decisions.
-> - `with-defaults` CLI flag — auto-accept safe built-in defaults without prompting
->   and without enabling interactive mode. Useful for CI.
+> - `with-defaults` CLI flag — apply built-in decisions without prompting and without enabling
+>   interactive mode. It accepts the suggested versions and opts in to push, while unsafe
+>   conditions such as snapshot dependencies, tag conflicts, and remote failures still abort.
 >
 > The two can be combined: when both are active, `with-defaults` pre-answers prompts
 > that would otherwise appear.
@@ -42,12 +44,13 @@ When interactive mode is enabled and no decision default is configured, five pro
 
 When interactive is `false` (the default) and no decision default is set:
 
+- suggested release and next versions are accepted
 - snapshot-dependency and tag-conflict issues raise errors
 - push is skipped
-- remote-check failures abort
+- remote-check failures and upstream-behind checks abort
 
-The `with-defaults` CLI flag pre-answers all prompts with safe defaults without enabling
-interactive mode.
+The `with-defaults` CLI flag applies the prompt defaults without enabling interactive mode:
+suggested versions are accepted, unsafe continuations are declined, and push is accepted.
 
 ## Shared decision-default settings
 
@@ -66,7 +69,7 @@ interactive mode.
 | `releaseIOVersioningFile` | `File` | `baseDirectory / "version.sbt"` | Path to the version file |
 | `releaseIOVersioningUseGlobal` | `Boolean` | `true` | Read/write `ThisBuild / version` instead of project-scoped `version` |
 | `releaseIOVersioningReadVersion` | `File => IO[String]` | parses `version := "x.y.z"` | Read a version from the version file |
-| `releaseIOVersioningFileContents` | `(File, String) => IO[String]` | writes `ThisBuild / version := "x.y.z"` | Produce version-file contents for a new version |
+| `releaseIOVersioningFileContents` | `(File, String) => IO[String]` | writes `ThisBuild / version := "x.y.z"`, or `version := "x.y.z"` when `releaseIOVersioningUseGlobal` is `false` | Produce version-file contents for a new version |
 | `releaseIOVersioningBump` | `Version.Bump` | `Next` | Version bump strategy |
 | `releaseIOVersioningReleaseVersion` | `String => String` | strips qualifier/snapshot | Compute the release version from the current one |
 | `releaseIOVersioningNextVersion` | `String => String` | bumps and appends `-SNAPSHOT` | Compute the next development version |

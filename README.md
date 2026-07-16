@@ -5,7 +5,12 @@
 [![CI](https://github.com/scalauser12/sbt-release-io/actions/workflows/ci.yml/badge.svg)](https://github.com/scalauser12/sbt-release-io/actions/workflows/ci.yml)
 [![Built with Claude Code](https://img.shields.io/badge/Built%20with-Claude%20Code-blueviolet?logo=anthropic)](https://claude.ai/claude-code)
 
-Drop-in replacement for [sbt-release](https://github.com/sbt/sbt-release) rebuilt on cats-effect IO, with hook-based customization, monorepo support, and `Resource`-safe lifecycle management.
+A cats-effect IO alternative to [sbt-release](https://github.com/sbt/sbt-release), with
+hook-based customization, monorepo support, and `Resource`-safe lifecycle management. It uses
+`releaseIO` commands and policy/hook/resource APIs rather than sbt-release's commands and process
+editing, and it supports Git only. See the
+[execution-model comparison](docs/core/concepts.md#execution-model-sbt-release-io-vs-sbt-release)
+for more differences.
 
 ## Documentation
 
@@ -122,7 +127,7 @@ sbt --server --sbt-version 1.12.3 scripted
 # sbt 2 / Scala 3 default lane (pinned in project/build.properties and project/sbt2.version)
 sbt --server --sbt-version 2.0.0 compile  # direct sbt 2 lane
 sbt --server --sbt-version 2.0.0 test
-./bin/sbt2-clean test                # same sbt 2 test lane from a clean checkout of tracked files
+./bin/sbt2-clean test                # same lane from a filtered current-working-tree copy
 ./bin/sbt2-clean core/scripted       # core scripted tests on sbt 2
 ./bin/sbt2-clean monorepo/scripted   # monorepo scripted tests on sbt 2
 
@@ -136,9 +141,10 @@ sbt scalafmtSbtCheck     # verify sbt/build file formatting
 The explicit compatibility commands use `--server --sbt-version` so the sbt 1 override wins
 even though `project/build.properties` selects sbt 2 and enables its native client by default.
 Plain `sbt ...` uses sbt 2.0.0 from `project/build.properties`. Prefer
-`./bin/sbt2-clean ...` for local sbt 2 verification when your checkout has generated IDE files
-such as `project/metals.sbt` or `.bloop/` — those can interfere with sbt 2 compilation. CI runs
-on a clean checkout and uses the explicitly pinned sbt version for each lane.
+`./bin/sbt2-clean ...` for local sbt 2 verification: it copies the current working tree to a
+temporary directory while filtering known generated IDE/build files such as
+`project/metals.sbt` and `.bloop/`. Non-excluded untracked files are included. CI runs on a clean
+checkout and uses the explicitly pinned sbt version for each lane.
 
 ## Compatibility
 

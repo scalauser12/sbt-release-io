@@ -59,8 +59,9 @@ running this — if anyone else pushed in the meantime, the range will revert
 unrelated commits.
 
 ```bash
-# Delete the remote tag
+# Delete the remote and local tag
 git push origin :refs/tags/v1.0.0
+git tag -d v1.0.0
 
 # Safe revert of both release commits (git applies them newest-first)
 git revert HEAD~2..HEAD

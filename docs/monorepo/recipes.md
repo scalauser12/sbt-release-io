@@ -81,14 +81,22 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0  # full history for change detection and tag lookup
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
+          cache: sbt
+      - uses: sbt/setup-sbt@v1
+      - name: Configure Git author
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
       - name: Release
         env:
           CORE_RELEASE_VERSION: ${{ github.event.inputs.core_version }}
@@ -98,6 +106,12 @@ jobs:
 ```
 
 > **Note:** `fetch-depth: 0` is important — change detection uses `git diff` against the last tag, so shallow clones may produce incorrect results.
+
+The release command runs `publish-artifacts` by default. Configure the project-specific
+`publishTo` and repository credentials before using this workflow, and pass credentials through
+GitHub Actions secrets. The `contents: write` permission covers Git commits, tags, and push only;
+it does not grant access to an artifact repository. If this workflow should not publish, disable
+the publish phase explicitly with `releaseIOMonorepoPolicyEnablePublish := false`.
 
 Use an explicit project selector in CI when you intend to release only one project. Version
 overrides force-include their target, but they do not narrow change-detection selection on their own.
