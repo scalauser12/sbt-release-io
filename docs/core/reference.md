@@ -18,8 +18,10 @@ In `.scala` build sources under `project/`, import grouped keys from
 > - `releaseIOBehaviorInteractive := true` — re-enable interactive prompts for versions,
 >   confirmation, and push decisions.
 > - `with-defaults` CLI flag — apply built-in decisions without prompting and without enabling
->   interactive mode. It accepts the suggested versions and opts in to push, while unsafe
->   conditions such as snapshot dependencies, tag conflicts, and remote failures still abort.
+>   interactive mode. It accepts the suggested versions and supplies the built-in yes answer for
+>   push only when neither `default-push-answer` nor `releaseIODefaultsPushAnswer` provides an
+>   answer, while unsafe conditions such as snapshot dependencies, tag conflicts, and remote
+>   failures still abort.
 >
 > The two can be combined: when both are active, `with-defaults` pre-answers prompts
 > that would otherwise appear.
@@ -30,9 +32,17 @@ In `.scala` build sources under `project/`, import grouped keys from
 | ------- | ---- | ------- | ----------- |
 | `releaseIOBehaviorCrossBuild` | `Boolean` | `false` | Cross-build steps per `crossScalaVersions` |
 | `releaseIOBehaviorSkipPublish` | `Boolean` | `false` | Skip the publish step body and its `beforePublish` / `afterPublish` hooks at runtime |
-| `releaseIOBehaviorInteractive` | `Boolean` | `false` | Enable interactive prompting in `run` mode |
+| `releaseIOBehaviorInteractive` | `Boolean` | `false` | Enable interactive prompting during a full release |
 
-When interactive mode is enabled and no decision default is configured, five prompts may appear:
+When interactive mode is enabled, `with-defaults` is absent, and versions are not supplied on the
+command line, up to two version prompts may appear:
+
+- `Release version [<suggested>] :`
+- `Next version [<suggested>] :`
+
+Five decision-prompt types may also appear when their corresponding defaults are not configured.
+The complete interactive prompt surface is therefore five decision-prompt types plus two version
+prompt types:
 
 | Prompt | When | Default |
 | ------ | ---- | ------- |
@@ -50,7 +60,8 @@ When interactive is `false` (the default) and no decision default is set:
 - remote-check failures and upstream-behind checks abort
 
 The `with-defaults` CLI flag applies the prompt defaults without enabling interactive mode:
-suggested versions are accepted, unsafe continuations are declined, and push is accepted.
+suggested versions are accepted, unsafe continuations are declined, and push defaults to accepted
+only when `default-push-answer` and `releaseIODefaultsPushAnswer` are both unset.
 
 ## Shared decision-default settings
 
@@ -155,6 +166,10 @@ ways — see [Disabling publish: policy vs behavior](configuration.md#disabling-
 | _(none)_ | Run the full release |
 | `help` | Print usage, flags, examples, and docs links |
 | `check` | Run a preflight with no release side effects |
+
+`check` skips the execute phase and the built-in release mutations (version writes, commits, tags,
+publish, and push). It still invokes validation functions and `precondition` hooks; custom
+validation code is responsible for avoiding durable external side effects.
 
 ### Flags
 

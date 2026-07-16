@@ -88,8 +88,10 @@ sbt "releaseIO help"
 sbt "releaseIO check with-defaults"
 ```
 
-This validates the same hook and policy configuration the real release would run, but with no
-release side effects: no version-file writes, commits, tags, publish, or push.
+This validates the compiled lifecycle and each step's validation function, including the
+`validate-main-branch` precondition, but performs no built-in release actions: no version-file
+writes, commits, tags, publish, or push. The `print-tag-banner` hook is a `sideEffect`, so its
+execute function is listed in the plan but does not run during `check`.
 
 ## 6. Rehearse explicit versions
 
@@ -97,9 +99,12 @@ release side effects: no version-file writes, commits, tags, publish, or push.
 sbt "releaseIO check with-defaults release-version 0.3.0 next-version 0.4.0-SNAPSHOT"
 ```
 
-This is useful when you want to confirm commit messages and hook execution against a specific
-version pair before a real release. Version and tag summaries remain available as long as no
-execute-time hook rewrites them.
+This validates the plan with explicit version overrides and checks that the
+validation/precondition hooks pass. It does not evaluate the release commit-message tasks or
+execute `sideEffect` hooks. Because this walkthrough installs execute-time hooks before version
+resolution and before tagging, the preflight conservatively reports the version and tag summaries
+as not evaluated: an execute function in those phases could change the sbt state before the real
+steps. The full release below uses the explicit versions and runs the banner hook.
 
 ## 7. Run the local-only release
 

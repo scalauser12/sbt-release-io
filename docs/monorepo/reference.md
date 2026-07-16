@@ -21,9 +21,10 @@ catalog, see the [core settings reference](../core/reference.md).
 > - `releaseIOMonorepoBehaviorInteractive := true` — re-enable interactive prompts for
 >   versions, confirmation, and push decisions.
 > - `with-defaults` CLI flag — choose the built-in defaults without prompting and without
->   enabling interactive mode. This uses computed versions and enables push, but blocking
->   conditions still default to abort unless their corresponding `default-*` answer is
->   configured explicitly. Useful for CI.
+>   enabling interactive mode. This uses computed versions and supplies the built-in yes answer
+>   for push only when neither `default-push-answer` nor `releaseIODefaultsPushAnswer` provides an
+>   answer. Blocking conditions still default to abort unless their corresponding `default-*`
+>   answer is configured explicitly. Useful for CI.
 >
 > The two can be combined: when both are active, `with-defaults` pre-answers prompts
 > that would otherwise appear.
@@ -34,6 +35,16 @@ catalog, see the [core settings reference](../core/reference.md).
 | ------- | ---- | ------- | ----------- |
 | `releaseIOMonorepoSelectionProjects` | `Seq[ProjectRef]` | all transitively aggregated subprojects | Which subprojects participate in releases |
 
+Every configured `ProjectRef` must have a unique `ref.project` value. CLI selectors and
+`project=version` overrides are name-based, so duplicate project ids make the command parser
+ambiguous and are rejected.
+
+The default is project-scoped and forwards a non-empty
+`ThisBuild / releaseIOMonorepoSelectionProjects` override. At `ThisBuild` scope, `Seq.empty`
+is also the internal sentinel for "use the aggregate-derived default," so it does not express
+an intentionally empty selection. To override the root with an empty sequence, set
+`releaseIOMonorepoSelectionProjects := Seq.empty` in the root project's settings instead.
+
 ## Behavior settings
 
 | Setting | Type | Default | Description |
@@ -41,7 +52,7 @@ catalog, see the [core settings reference](../core/reference.md).
 | `releaseIOMonorepoBehaviorCrossBuild` | `Boolean` | `false` | Enable cross-building by default |
 | `releaseIOMonorepoBehaviorSkipTests` | `Boolean` | `false` | Skip tests |
 | `releaseIOMonorepoBehaviorSkipPublish` | `Boolean` | `false` | Skip the publish step body and its `beforePublish` / `afterPublish` hooks at runtime |
-| `releaseIOMonorepoBehaviorInteractive` | `Boolean` | `false` | Enable prompting in `run` mode |
+| `releaseIOMonorepoBehaviorInteractive` | `Boolean` | `false` | Enable prompting during a full release |
 
 ## Shared decision-default settings
 
@@ -99,6 +110,11 @@ publish in different ways — see [Disabling publish: policy vs behavior](config
 | `releaseIOMonorepoVersioningReadVersion` | `File => IO[String]` | regex parser | Read a version from a project's version file |
 | `releaseIOMonorepoVersioningFileContents` | `(File, String) => IO[String]` | `version := "x.y.z"\n` | Produce version-file contents for a project |
 
+At the start of each version-write phase, `releaseIOMonorepoVersioningFile` must resolve a
+distinct canonical file for every project in `releaseIOMonorepoSelectionProjects`, even for a
+partial release. Two configured projects may not share one version file. Each selected
+project's resolved file must also be inside the active VCS root.
+
 ## VCS settings
 
 | Setting | Type | Default | Description |
@@ -124,7 +140,7 @@ eligible publish, but it cannot turn a validated skip back into a publish; the
 
 | Setting | Type | Default | Description |
 | ------- | ---- | ------- | ----------- |
-| `releaseIOMonorepoDetectionEnabled` | `Boolean` | `true` | Enable git-based change detection |
+| `releaseIOMonorepoDetectionEnabled` | `Boolean` | `true` | Enable git-based change detection; when `false`, a release without explicit selectors treats all configured projects as changed |
 | `releaseIOMonorepoDetectionIncludeDownstream` | `Boolean` | `false` | Include downstream dependents of changed projects |
 | `releaseIOMonorepoDetectionChangeDetector` | `Option[(ProjectRef, File, State) => IO[Boolean]]` | `None` | Custom change detector |
 | `releaseIOMonorepoDetectionExcludes` | `Seq[File]` | `Seq.empty` | Files or directories to exclude from detection |

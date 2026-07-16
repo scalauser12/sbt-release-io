@@ -26,18 +26,35 @@ addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.13.6")
 `build.sbt` (root):
 
 ```scala
+lazy val core = (project in file("core"))
+lazy val api  = (project in file("api"))
+
 lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
+  .settings(
+    // Keep the first release local while you verify the setup.
+    releaseIOMonorepoPolicyEnablePush    := false,
+    releaseIOMonorepoPolicyEnablePublish := false
+  )
 ```
 
-Each subproject needs `version.sbt` with `version := "0.1.0-SNAPSHOT"`.
+Each subproject needs `version.sbt` with `version := "0.1.0-SNAPSHOT"`. Commit the build
+and version files before running the clean-working-tree preflight. That setup commit also verifies
+the author identity needed by the release commits.
 
-First command:
+First preflight:
 
 ```bash
 sbt "releaseIOMonorepo check with-defaults"
 ```
+
+The starter settings keep both the preflight and the first full release local. Remove them
+only after each publishing project has a valid `publishTo`/credentials setup and the current
+branch has the upstream remote that `push-changes` should use. The remote must permit branch
+updates and, when tagging is enabled, permit tag updates and support atomic multi-ref pushes. Once
+push is enabled, `with-defaults` supplies the built-in yes answer only when neither
+`default-push-answer` nor `releaseIODefaultsPushAnswer` provides an answer.
 
 Monorepo installs also expose the shared/core `releaseIO*` settings surface transitively.
 Use `MonorepoReleasePlugin.autoImport` for `releaseIOMonorepo*` keys and
@@ -51,7 +68,8 @@ surface.
 
 ## Read next
 
-- [Monorepo getting started](../../docs/monorepo/getting-started.md) for install, first `help` / `check` / `run`, and the main navigation path
+- [Monorepo getting started](../../docs/monorepo/getting-started.md) for installation, the
+  first `help` and `check` commands, a full release, and the main navigation path
 - [First release walkthrough](../../docs/monorepo/walkthrough.md) for an end-to-end setup from scratch
 - [Selective release walkthrough](../../docs/monorepo/selective-release-walkthrough.md) for change detection, downstream inclusion, and explicit selectors
 - [Monorepo configuration](../../docs/monorepo/configuration.md) for the grouped settings surface and [Monorepo usage](../../docs/monorepo/usage.md) for CLI syntax

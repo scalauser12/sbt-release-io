@@ -57,16 +57,17 @@ releaseIOHooksBeforePublish += ReleaseHookIO.sideEffect("verify-publish-env") { 
 The plugin defaults to non-interactive mode (`releaseIOBehaviorInteractive := false`). Suggested
 release and next versions are accepted automatically, blocking safety checks abort when they need
 a decision, and an unconfigured push is skipped. For a predictable CI release, supply versions
-explicitly and pass `with-defaults` to apply the built-in decisions, including opting in to push:
+explicitly, pass `with-defaults` for the built-in safety decisions, and pass
+`default-push-answer y` so the CLI explicitly opts in to push:
 
 ```bash
-sbt "releaseIO with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
+sbt "releaseIO with-defaults default-push-answer y release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
 ```
 
 If CI runs tests in a prior step, add `skip-tests` to avoid running them again:
 
 ```bash
-sbt "releaseIO with-defaults skip-tests release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
+sbt "releaseIO with-defaults default-push-answer y skip-tests release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
 ```
 
 ### GitHub Actions example
@@ -106,13 +107,16 @@ jobs:
           RELEASE_VERSION: ${{ github.event.inputs.version }}
           NEXT_VERSION: ${{ github.event.inputs.next_version }}
         run: |
-          sbt "releaseIO with-defaults release-version $RELEASE_VERSION next-version $NEXT_VERSION"
+          sbt "releaseIO with-defaults default-push-answer y release-version $RELEASE_VERSION next-version $NEXT_VERSION"
 ```
 
 This example uses `GITHUB_TOKEN` (persisted by `actions/checkout`) for the Git push only. Configure
 `publishTo` in the project and expose the repository-specific publishing credentials expected by
 your build, typically as encrypted GitHub secrets passed to the `Release` step. The
 `contents: write` permission does not grant access to Maven Central or another artifact repository.
+The push target must permit branch updates and, when tagging is enabled, permit tag updates and
+support atomic multi-ref pushes. An unsupported remote can fail at the final push after artifacts
+have been published.
 
 For the full list of CLI flags and subcommands, see [Settings reference — CLI](reference.md#cli).
 
@@ -142,7 +146,12 @@ Or with explicit versions:
 sbt "releaseIO check with-defaults release-version 1.0.0 next-version 1.1.0-SNAPSHOT"
 ```
 
-`check` has no release side effects: no version-file writes, commits, tags, publish, or push. When runtime hooks can no longer change them, it also resolves versions and tag names; otherwise it marks them as not evaluated. With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version.
+`check` has no release side effects: no version-file writes, commits, tags, publish, or push. It
+still invokes validation functions and `precondition` hooks, so custom validation code should
+avoid durable external side effects. When runtime hooks can no longer change them, `check` also
+resolves versions and tag names; otherwise it marks them as not evaluated. With cross-build
+validation enabled, sbt may temporarily switch Scala versions during validation and then restore
+the entry version.
 
 Then run the real release with explicit versions so the tag name and commit count are
 predictable:

@@ -6,9 +6,8 @@ This file is the canonical release history for the repository.
 
 ## v0.13.6
 
-Published: 2026-07-13
-GitHub release:
-[v0.13.6](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.13.6)
+Published: 2026-07-13<br>
+GitHub release: [v0.13.6](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.13.6)
 
 `v0.13.6` is a patch release for both plugins that hardens monorepo tag and
 publish validation, makes version commits atomic, and simplifies internal
@@ -67,9 +66,8 @@ workflows while preserving public APIs.
 
 ## v0.13.5
 
-Published: 2026-07-08
-GitHub release:
-[v0.13.5](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.13.5)
+Published: 2026-07-08<br>
+GitHub release: [v0.13.5](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.13.5)
 
 `v0.13.5` is a patch release for both plugins that fixes git path handling for
 non-ASCII paths and makes monorepo change detection avoid pathspec-dependent
@@ -120,9 +118,8 @@ diffs.
 
 ## v0.13.4
 
-Published: 2026-06-21
-GitHub release:
-[v0.13.4](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.13.4)
+Published: 2026-06-21<br>
+GitHub release: [v0.13.4](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.13.4)
 
 `v0.13.4` is a patch release for both plugins that tightens tag-conflict
 preflight around kept tags, improves release-flow diagnostics, and keeps the
@@ -169,9 +166,8 @@ public release contract unchanged while simplifying shared internals.
 
 ## v0.13.3
 
-Published: 2026-06-16
-GitHub release:
-[v0.13.3](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.13.3)
+Published: 2026-06-16<br>
+GitHub release: [v0.13.3](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.13.3)
 
 `v0.13.3` is a patch release for both plugins that moves the sbt 2 lane to
 final sbt `2.0.0` and keeps the public release contract unchanged while
@@ -217,9 +213,8 @@ simplifying shared runtime, lifecycle, preflight, and packaging internals.
 
 ## v0.13.2
 
-Published: 2026-05-11
-GitHub release:
-[v0.13.2](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.13.2)
+Published: 2026-05-11<br>
+GitHub release: [v0.13.2](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.13.2)
 
 `v0.13.2` is a patch release for both plugins that makes version-aware release
 hooks more useful during `check`, tightens monorepo tag formatter validation,
@@ -273,9 +268,8 @@ and fixes release manifest metadata for aggregated core publishes.
 
 ## v0.13.1
 
-Published: 2026-05-06
-GitHub release:
-[v0.13.1](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.13.1)
+Published: 2026-05-06<br>
+GitHub release: [v0.13.1](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.13.1)
 
 `v0.13.1` is a patch release for both plugins that keeps the public contract
 unchanged while simplifying internal release command, lifecycle, tagging, and
@@ -312,9 +306,8 @@ monorepo preflight boundaries.
 
 ## v0.13.0
 
-Published: 2026-05-04
-GitHub release:
-[v0.13.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.13.0)
+Published: 2026-05-04<br>
+GitHub release: [v0.13.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.13.0)
 
 `v0.13.0` is a minor release for both plugins that finalizes the intent-named hook
 factory API by removing the deprecated `.io`, `.action`, and `.actionTracked`
@@ -364,9 +357,8 @@ public; user code that builds hooks via the case class continues to compile.
 
 ## v0.12.3
 
-Published: 2026-04-29
-GitHub release:
-[v0.12.3](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.12.3)
+Published: 2026-04-29<br>
+GitHub release: [v0.12.3](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.12.3)
 
 `v0.12.3` is a patch release for both plugins that tightens publish validation around
 version-dependent publish gates and keeps the sbt 2 release lane aligned with the tag-driven
@@ -401,9 +393,8 @@ publishing workflow.
 
 ## v0.12.2
 
-Published: 2026-04-29
-GitHub release:
-[v0.12.2](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.12.2)
+Published: 2026-04-29<br>
+GitHub release: [v0.12.2](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.12.2)
 
 `v0.12.2` is a patch release for both plugins that clarifies the HookAPI
 deprecation path and migration guidance without removing any deprecated methods.
@@ -440,9 +431,8 @@ deprecation path and migration guidance without removing any deprecated methods.
 
 ## v0.12.1
 
-Published: 2026-04-26
-GitHub release:
-[v0.12.1](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.12.1)
+Published: 2026-04-26<br>
+GitHub release: [v0.12.1](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.12.1)
 
 `v0.12.1` is a patch release for both plugins that adds precondition hook factories,
 hardens version and tag validation, improves cross-build behavior, and makes release
@@ -482,9 +472,8 @@ Git operations more robust.
 
 ## v0.12.0
 
-Published: 2026-04-23
-GitHub release:
-[v0.12.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.12.0)
+Published: 2026-04-23<br>
+GitHub release: [v0.12.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.12.0)
 
 `v0.12.0` is a minor release for both plugins that adds clearer tracked hook factories for core
 and monorepo customization, improves recovery/preflight behavior around hook-driven state, and
@@ -535,9 +524,8 @@ hardens Git branch/tag/process handling in release execution.
 
 ## v0.11.1
 
-Published: 2026-04-16
-GitHub release:
-[v0.11.1](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.11.1)
+Published: 2026-04-16<br>
+GitHub release: [v0.11.1](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.11.1)
 
 `v0.11.1` is a patch release for both plugins that hardens monorepo preflight/version-file
 handling, keeps build packaging and published metadata tidy, and refreshes the published docs to
@@ -580,9 +568,8 @@ point at the latest release.
 
 ## v0.11.0
 
-Published: 2026-04-14
-GitHub release:
-[v0.11.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.11.0)
+Published: 2026-04-14<br>
+GitHub release: [v0.11.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.11.0)
 
 ### Breaking changes
 
@@ -615,9 +602,8 @@ GitHub release:
 
 ## v0.10.0
 
-Published: 2026-04-10
-GitHub release:
-[v0.10.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.10.0)
+Published: 2026-04-10<br>
+GitHub release: [v0.10.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.10.0)
 
 `v0.10.0` is a breaking release for both plugins that removes the deprecated compatibility
 namespaces and mixin-based grouped-key access, continues the shared runtime cleanup, and refreshes
@@ -669,9 +655,8 @@ the published docs around the grouped hook/policy customization model.
 
 ## v0.9.2
 
-Published: 2026-04-09
-GitHub release:
-[v0.9.2](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.9.2)
+Published: 2026-04-09<br>
+GitHub release: [v0.9.2](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.9.2)
 
 `v0.9.2` is a patch release for both plugins that makes plugin `autoImport` the canonical
 Scala-source import path, keeps the legacy compatibility namespaces available with deprecation
@@ -709,9 +694,8 @@ warnings, and refreshes the published examples and docs to match.
 
 ## v0.9.1
 
-Published: 2026-04-07
-GitHub release:
-[v0.9.1](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.9.1)
+Published: 2026-04-07<br>
+GitHub release: [v0.9.1](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.9.1)
 
 `v0.9.1` is a patch hardening release for both plugins, tightening Git/VCS execution, monorepo
 selection and cross-build cleanup, prompt/help behavior, and supporting guidance without expanding
@@ -753,9 +737,8 @@ the public customization surface introduced in `v0.9.0`.
 
 ## v0.9.0
 
-Published: 2026-04-06
-GitHub release:
-[v0.9.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.9.0)
+Published: 2026-04-06<br>
+GitHub release: [v0.9.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.9.0)
 
 `v0.9.0` completes the breaking API cleanup started in `v0.8.1`, making the grouped hook and
 policy settings the only supported build-facing customization model across both plugins while
@@ -801,9 +784,8 @@ continuing the internal release-runtime simplification work.
 
 ## v0.8.1
 
-Published: 2026-04-03
-GitHub release:
-[v0.8.1](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.8.1)
+Published: 2026-04-03<br>
+GitHub release: [v0.8.1](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.8.1)
 
 `v0.8.1` hardens release execution across both plugins with more reliable
 validation and preflight handling, sturdier cross-build and VCS execution, and
@@ -868,9 +850,8 @@ clearer build-facing customization guidance.
 
 ## v0.8.0
 
-Published: 2026-04-01
-GitHub release:
-[v0.8.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.8.0)
+Published: 2026-04-01<br>
+GitHub release: [v0.8.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.8.0)
 
 `v0.8.0` consolidates the internal release runtime for both plugins, formalizes
 persistent decision defaults in the public API, and removes the remaining
@@ -936,9 +917,8 @@ resource-aware custom plugins.
 
 ## v0.7.1
 
-Published: 2026-03-31
-GitHub release:
-[v0.7.1](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.7.1)
+Published: 2026-03-31<br>
+GitHub release: [v0.7.1](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.7.1)
 
 `v0.7.1` hardens the release execution path for both `sbt-release-io` and
 `sbt-release-io-monorepo`, with clearer process-mode behavior, stricter
@@ -989,9 +969,8 @@ preflight validation, and improved interactive release flows.
 
 ## v0.7.0
 
-Published: 2026-03-28  
-GitHub release:
-[v0.7.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.7.0)
+Published: 2026-03-28<br>
+GitHub release: [v0.7.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.7.0)
 
 `v0.7.0` is the first release that makes hook-based customization the preferred
 extension model for both `sbt-release-io` and `sbt-release-io-monorepo`, while
@@ -1046,9 +1025,8 @@ keeping raw process editing available as a legacy compatibility mode.
 
 ## v0.6.0
 
-Published: 2026-03-23  
-GitHub release:
-[v0.6.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.6.0)
+Published: 2026-03-23<br>
+GitHub release: [v0.6.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.6.0)
 
 ### Breaking Changes
 
@@ -1124,9 +1102,8 @@ val mStep = MonorepoStepIO.global("name").execute(ctx => IO.pure(ctx))
 
 ## v0.5.3
 
-Published: 2026-03-20  
-GitHub release:
-[v0.5.3](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.5.3)
+Published: 2026-03-20<br>
+GitHub release: [v0.5.3](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.5.3)
 
 ### Bug Fixes
 
@@ -1163,9 +1140,8 @@ GitHub release:
 
 ## v0.5.2
 
-Published: 2026-03-19  
-GitHub release:
-[v0.5.2](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.5.2)
+Published: 2026-03-19<br>
+GitHub release: [v0.5.2](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.5.2)
 
 ### Bug Fixes
 
@@ -1218,9 +1194,8 @@ GitHub release:
 
 ## v0.5.1
 
-Published: 2026-03-17  
-GitHub release:
-[v0.5.1](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.5.1)
+Published: 2026-03-17<br>
+GitHub release: [v0.5.1](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.5.1)
 
 ### Features
 
@@ -1242,9 +1217,8 @@ GitHub release:
 
 ## v0.5.0
 
-Published: 2026-03-16  
-GitHub release:
-[v0.5.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.5.0)
+Published: 2026-03-16<br>
+GitHub release: [v0.5.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.5.0)
 
 ### Breaking Changes
 
@@ -1293,9 +1267,8 @@ GitHub release:
 
 ## v0.4.2
 
-Published: 2026-03-09  
-GitHub release:
-[v0.4.2](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.4.2)
+Published: 2026-03-09<br>
+GitHub release: [v0.4.2](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.4.2)
 
 ### CI & Build
 
@@ -1314,9 +1287,8 @@ GitHub release:
 
 ## v0.4.1
 
-Published: 2026-03-07  
-GitHub release:
-[v0.4.1](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.4.1)
+Published: 2026-03-07<br>
+GitHub release: [v0.4.1](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.4.1)
 
 ### Bug Fixes
 
@@ -1343,9 +1315,8 @@ GitHub release:
 
 ## v0.4.0
 
-Published: 2026-03-06  
-GitHub release:
-[v0.4.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.4.0)
+Published: 2026-03-06<br>
+GitHub release: [v0.4.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.4.0)
 
 ### Features
 
@@ -1381,9 +1352,8 @@ GitHub release:
 
 ## v0.3.1
 
-Published: 2026-03-05  
-GitHub release:
-[v0.3.1](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.3.1)
+Published: 2026-03-05<br>
+GitHub release: [v0.3.1](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.3.1)
 
 ### Improvements
 
@@ -1393,9 +1363,8 @@ GitHub release:
 
 ## v0.3.0
 
-Published: 2026-03-04  
-GitHub release:
-[v0.3.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.3.0)
+Published: 2026-03-04<br>
+GitHub release: [v0.3.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.3.0)
 
 ### Features
 
@@ -1433,9 +1402,8 @@ GitHub release:
 
 ## v0.2.1
 
-Published: 2026-03-03  
-GitHub release:
-[v0.2.1](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.2.1)
+Published: 2026-03-03<br>
+GitHub release: [v0.2.1](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.2.1)
 
 ### Features
 
@@ -1474,9 +1442,8 @@ GitHub release:
 
 ## v0.2.0
 
-Published: 2026-03-03  
-GitHub release:
-[v0.2.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.2.0)
+Published: 2026-03-03<br>
+GitHub release: [v0.2.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.2.0)
 
 ### Features
 
@@ -1494,9 +1461,8 @@ GitHub release:
 
 ## v0.1.0
 
-Published: 2026-03-03  
-GitHub release:
-[v0.1.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.1.0)
+Published: 2026-03-03<br>
+GitHub release: [v0.1.0](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.1.0)
 
 ### Features
 

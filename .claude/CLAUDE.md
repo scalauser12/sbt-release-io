@@ -5,11 +5,13 @@ See the root `CLAUDE.md` for full project documentation, conventions, and archit
 ## Quick Reference
 
 ```bash
-./bin/sbt2-clean compile        # compile all modules on the default sbt 2 lane
-./bin/sbt2-clean test           # run all unit tests
-./bin/sbt2-clean scripted       # run all scripted integration tests
-sbt scalafmtAll            # format sources
-sbt scalafmtCheckAll       # check formatting
+./bin/sbt2-clean compile   # compile all modules on the default sbt 2 lane
+./bin/sbt2-clean test      # run all unit tests
+./bin/sbt2-clean scripted  # run all scripted integration tests
+sbt scalafmtAll            # format Scala sources
+sbt scalafmtSbt            # format .sbt and project/*.scala files
+sbt scalafmtCheckAll       # check Scala source formatting
+sbt scalafmtSbtCheck       # check sbt/build file formatting
 ```
 
 ### Compatibility lane (sbt 1)

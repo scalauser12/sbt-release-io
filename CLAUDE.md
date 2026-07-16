@@ -88,7 +88,16 @@ Contributor-oriented overview (modules, command flow, glossary): [docs/ARCHITECT
 | `core/ReleaseComposer.scala` | Internal (`private[release]`) policy/hook composition for the core release sequence |
 | `core/internal/CoreLifecycle.scala` | Wires core policy/hook settings to the shared lifecycle compiler |
 | `core/internal/CoreCommandExecution.scala` | Core command preparation, planning, and release/check orchestration |
-| `core/internal/steps/` | The 14 built-in step values live in `VcsSteps.scala` (initialize-vcs, check-clean, push-changes), `TagSteps.scala` (tag-preflight, tag-release), `VersionSteps.scala` (inquire/set/commit version), and `PublishSteps.scala` (check-snapshot-deps, publish-artifacts, run-tests, run-clean). `ReleaseVersionWorkflow.scala` provides the supporting version mechanics. All are `private[release]`. |
+| `core/internal/steps/` | The 14 built-in step values, split across VCS, tag, version, and publish files. `ReleaseVersionWorkflow.scala` provides the supporting version mechanics. All are `private[release]`. |
+
+The stable built-in phase names are:
+
+- `VcsSteps.scala`: `initialize-vcs`, `check-clean-working-dir`, `push-changes`
+- `TagSteps.scala`: `tag-preflight`, `tag-release`
+- `VersionSteps.scala`: `inquire-versions`, `set-release-version`,
+  `commit-release-version`, `set-next-version`, `commit-next-version`
+- `PublishSteps.scala`: `check-snapshot-dependencies`, `run-clean`, `run-tests`,
+  `publish-artifacts`
 
 ### Monorepo Module
 
@@ -119,7 +128,9 @@ Contributor-oriented overview (modules, command flow, glossary): [docs/ARCHITECT
 | `runtime/workflow/DecisionDefaultsSupport.scala` | Shared resolution of grouped decision-default settings reused by core and monorepo |
 | `ReleaseSharedKeys.scala` | Runtime-owned shared sbt setting/task keys reused by `core` and `monorepo` without duplicating key identity |
 | `ReleaseSharedDefaultSettingsSupport.scala` | Runtime-owned shared default-setting logic reused by internal workflows and plugin setup |
-| `runtime/workflow/VersionWorkflow.scala` | Default version-file IO and publish validation helpers |
+| `runtime/workflow/VersionWorkflow.scala` | Shared version-input resolution plus version-file existence, ignore, write, and change checks |
+| `runtime/workflow/DefaultVersionFileIO.scala` | Default `version.sbt` parsing and rendering |
+| `runtime/workflow/PublishValidation.scala` | Shared publish-target validation for core and monorepo |
 | `runtime/sbt/AggregatePublishTargets.scala` | Resolves the project refs that `runAggregated` will fan out to for a given task key (mirrors sbt's aggregation expansion); reused by core publish/commit/tag and shareable with monorepo |
 | `VcsOps.scala` | Internal (`private[release]`) VCS workflow helpers shared by core and monorepo |
 | `vcs/Git.scala` | Git VCS adapter with `IO.blocking` wrappers |
@@ -140,7 +151,9 @@ Contributor-oriented overview (modules, command flow, glossary): [docs/ARCHITECT
 - Tests use **MUnit** with **munit-cats-effect** for IO assertions
 - Scripted tests live under `src/sbt-test/` in each module. When adding a new fixture, also list it under the relevant bullet in the matching `src/sbt-test/README.md` ([core](modules/core/src/sbt-test/README.md), [monorepo](modules/monorepo/src/sbt-test/README.md)) — the README is the only index of what scripted scenarios exist
 - All blocking operations wrapped in `IO.blocking`
-- Immutable context threading — steps return updated context, no mutable state
+- Context values are immutable. Validation returns updated values; tracked execution checkpoints
+  replacement values through a serialized mutable `TrackedContextHandle` rather than mutating a
+  context instance.
 - Hook-based customization is the supported build-facing model
 - Keep changes narrow by module boundary: `modules/core` for single-project behavior,
   `modules/monorepo` for monorepo-specific behavior, `modules/runtime` for shared internals
@@ -150,8 +163,12 @@ Contributor-oriented overview (modules, command flow, glossary): [docs/ARCHITECT
 
 ### Two-Phase Execution
 
-1. **Validation** (`releaseIO check`): runs all `validate` functions, no resource acquired, no side effects
-2. **Execution** (`releaseIO run`): acquires resource via `Resource.use`, runs validate + execute, threads context
+1. **Validation** (`releaseIO check`): runs applicable `validate` functions without acquiring the
+   shared resource and without release side effects such as writes, commits, tags, publish, or
+   push. Custom validators are arbitrary `IO` and remain responsible for their own effects.
+2. **Full release** (`releaseIO` with any desired flags): acquires the shared resource via
+   `Resource.use`, runs validation and execution, and checkpoints immutable context values through
+   `TrackedContextHandle`. The monorepo equivalents use `releaseIOMonorepo`.
 
 Core and monorepo command entry points share command-boundary cleanup, hook compilation,
 decision-default resolution, and final state handling through the runtime command helpers.
@@ -188,4 +205,11 @@ secrets unless explicitly asked.
 
 ## Release Sequence
 
-version bump → tag → push → GitHub Actions publishes → GitHub release notes
+Published artifact versions are derived from Git metadata by the `sbt-ci-release` tooling; the
+repository does not use a release-version bump commit. The canonical release path is:
+
+1. Finalize and merge the release documentation, including this changelog.
+2. Create and push a `v*` tag for the intended release version.
+3. Let the tag-triggered GitHub Actions workflow run all verification jobs and publish the
+   artifacts to Maven Central.
+4. Create the GitHub Release and its notes manually; the workflow does not create either one.

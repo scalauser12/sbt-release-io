@@ -65,6 +65,11 @@ non-Scala subprojects in a polyglot monorepo — override these three settings t
 Overriding only the reader without also pointing `releaseIOMonorepoVersioningFile` at a
 compatible file will fail the version bump step.
 
+The resolver must return a distinct canonical file for every project configured in
+`releaseIOMonorepoSelectionProjects`, including projects outside the current partial release;
+sharing one version file across projects is rejected. Files for selected projects must be
+inside the active VCS root so they can be staged and committed safely.
+
 | Setting | Type | Role |
 | ------- | ---- | ---- |
 | `releaseIOMonorepoVersioningFile` | `(ProjectRef, State) => File` | Resolve the version file per project. Use the `ProjectRef` to switch formats per subproject |
@@ -126,4 +131,5 @@ releaseIOMonorepoVersioningFileContents := { (file: File, ver: String) =>
 
 Same pattern as the [core custom version formats recipe](../core/configuration.md#custom-version-formats),
 adapted to the per-project signature: the file resolver takes `(ProjectRef, State)` so each
-subproject can pick its own format.
+subproject can pick its own format. `ref.project` values must be unique because CLI selectors
+and per-project version overrides use those ids.

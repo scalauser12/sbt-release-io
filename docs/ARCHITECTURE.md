@@ -11,7 +11,7 @@ This page maps **sbt modules**, **runtime layers**, and **internal types** so yo
 | Adjust shared default settings | [`ReleaseSharedDefaultSettingsSupport`](../modules/runtime/src/main/scala/io/release/ReleaseSharedDefaultSettingsSupport.scala) |
 | Adjust validate/execute scheduling | [`ExecutionEngine`](../modules/runtime/src/main/scala/io/release/runtime/engine/ExecutionEngine.scala) / [`LifecycleCompiler`](../modules/runtime/src/main/scala/io/release/runtime/engine/LifecycleCompiler.scala) |
 | Modify a built-in step's body | [`modules/core/.../steps/`](../modules/core/src/main/scala/io/release/core/internal/steps) / [`modules/monorepo/.../steps/`](../modules/monorepo/src/main/scala/io/release/monorepo/internal/steps) |
-| Change CLI parsing | [`MonorepoCommandParsers`](../modules/monorepo/src/main/scala/io/release/monorepo/internal/MonorepoCommandParsing.scala) / [`ReleaseCommandCli`](../modules/runtime/src/main/scala/io/release/runtime/command/ReleaseCommandCli.scala) |
+| Change CLI parsing | [`ReleaseCommandParsers`](../modules/core/src/main/scala/io/release/core/internal/ReleaseCommandParsing.scala) / [`MonorepoCommandParsers`](../modules/monorepo/src/main/scala/io/release/monorepo/internal/MonorepoCommandParsing.scala) / [`ReleaseCommandCli`](../modules/runtime/src/main/scala/io/release/runtime/command/ReleaseCommandCli.scala) |
 
 ## Module layout
 
@@ -49,6 +49,11 @@ Dashed edges are test-only dependencies.
 Both plugins block the sbt command thread, prepare a plan, compile hooks/policies into steps, then
 run them with cats-effect `IO` (`unsafeRunSync` at the command boundary). Shared engine pieces
 live in **runtime**; plugin-specific wiring lives in **core** or **monorepo**.
+
+Release context instances are immutable values. Validation functions return replacement values;
+tracked execution uses a serialized mutable `TrackedContextHandle` to checkpoint those immutable
+values for recovery while a step is running. The handle mutates its current reference, not a
+`ReleaseContext` or `MonorepoContext` instance.
 
 `ReleasePluginIO` owns the public shared/core `releaseIO*` import surface, and
 `MonorepoReleasePlugin` requires it while keeping its own `releaseIOMonorepo*` contract.
@@ -98,11 +103,12 @@ flowchart LR
 | Name | Meaning |
 | ---- | ------- |
 | `ProcessStep` | Internal ADT: [`Single`](../modules/runtime/src/main/scala/io/release/runtime/engine/ProcessStep.scala) (one context) or `PerItem` (context + item, e.g. project). Policies and hooks compile to these via [`LifecycleCompiler`](../modules/runtime/src/main/scala/io/release/runtime/engine/LifecycleCompiler.scala). |
-| `ExecutionEngine.PreparedStep` | Thin runtime wrapper (`validate` / `execute` as `C => IO[C]`) used only inside [`ExecutionEngine`](../modules/runtime/src/main/scala/io/release/runtime/engine/ExecutionEngine.scala). Composers build these from `ProcessStep`. |
+| `ExecutionEngine.PreparedStep` | Thin runtime wrapper with `validate: C => IO[C]` and `executeTracked: TrackedContextHandle[C] => IO[Unit]`, used only inside [`ExecutionEngine`](../modules/runtime/src/main/scala/io/release/runtime/engine/ExecutionEngine.scala). Composers build these from `ProcessStep`. |
 | Core `Step` | Type alias for `ProcessStep.Single[ReleaseContext]` — see [`CoreStepAliases`](../modules/core/src/main/scala/io/release/core/internal/CoreStepAliases.scala). |
 | Monorepo `AnyStep` | `ProcessStep[MonorepoContext, ProjectReleaseInfo]` (single or per-project). |
-| `ReleaseContext` | Core threaded state (versions, VCS, sbt `State`, flags). |
-| `MonorepoContext` | Global monorepo state plus per-project info and selection. |
+| `ReleaseContext` | Immutable core state value (versions, VCS, sbt `State`, flags). |
+| `MonorepoContext` | Immutable global monorepo state value plus per-project info and selection. |
+| `TrackedContextHandle` | Serialized mutable checkpoint holder used during execute callbacks; each checkpoint is an immutable context value. |
 
 For validate/execute semantics and `releaseIO check` / `releaseIOMonorepo check`, see [Core concepts](core/concepts.md) and [Monorepo concepts](monorepo/concepts.md).
 

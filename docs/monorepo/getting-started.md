@@ -52,7 +52,17 @@ version := "0.1.0-SNAPSHOT"
 The plugin reads and writes these files during the release. The file path and format can be
 customized — see [Versioning settings](reference.md#versioning-settings).
 
-This starter path disables push and publish so your first run stays local. Re-enable them once `publishTo` and your remote release workflow are ready.
+Commit the plugin, build, and version-file setup before the preflight;
+`check-clean-working-dir` rejects tracked or untracked working-tree changes. A full release also
+creates Git commits, so this setup commit verifies that an author identity is configured.
+
+This starter path disables push and publish so your first run stays local. Re-enable them
+only after each publishing project has a valid `publishTo`/credentials setup and the current
+branch has the upstream remote that `push-changes` should use. That remote must permit branch
+updates and, when tagging is enabled, permit tag updates and support atomic multi-ref pushes. The
+default tagged release uses `git push --atomic`; an unsupported remote can fail at the final push
+after artifacts have been published. Once push is enabled, `with-defaults` supplies a yes fallback
+only when neither `default-push-answer` nor `releaseIODefaultsPushAnswer` provides an answer.
 
 > **Migrating from an older configuration:** move any shared root version file setup to
 > per-project `version.sbt` files, and replace any global CLI overrides with
@@ -71,7 +81,7 @@ Start by inspecting the built-in command help:
 sbt "releaseIOMonorepo help"
 ```
 
-Run a preflight to validate the release setup without side effects:
+Run a preflight to validate the release setup without release side effects:
 
 ```bash
 sbt "releaseIOMonorepo check with-defaults"

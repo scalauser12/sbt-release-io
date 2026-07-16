@@ -10,7 +10,8 @@ change detection, topological ordering, and failure isolation.
 ## Start
 
 - [Getting started](getting-started.md)
-  Install the plugin, run the first `help` / `check` / `run`, and find the next pages to read.
+  Install the plugin, run the first `help` and `check` commands and a full release, then find
+  the next pages to read.
 - [First release walkthrough](walkthrough.md)
   Set up a small monorepo from scratch and run the first end-to-end release.
 - [Selective release walkthrough](selective-release-walkthrough.md)

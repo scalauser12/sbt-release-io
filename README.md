@@ -38,17 +38,34 @@ Install in `project/plugins.sbt`:
 addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.13.6")
 ```
 
-The plugin auto-enables on all projects. Add a `version.sbt`:
+The plugin auto-enables on JVM projects. Add a `version.sbt`:
 
 ```scala
 ThisBuild / version := "0.1.0-SNAPSHOT"
 ```
 
-First command:
+For an initial local rehearsal, disable the remote phases in `build.sbt`:
+
+```scala
+releaseIOPolicyEnablePublish := false
+releaseIOPolicyEnablePush    := false
+```
+
+Initialize Git if necessary, then commit the build and version files so the working tree is
+clean. That setup commit also verifies the author identity needed by the release commits. Run the
+first preflight:
 
 ```bash
 sbt "releaseIO check with-defaults"
 ```
+
+The starter policy settings avoid publish-target and upstream checks and also keep a subsequent
+full release local. Before re-enabling publish, configure `publishTo` and credentials (or set
+`publish / skip := true` where appropriate). Before re-enabling push, make sure the current branch
+tracks a writable upstream that permits branch updates and, when tagging is enabled, permits tag
+updates and supports atomic multi-ref pushes. `with-defaults` supplies the built-in yes answer for
+an enabled push phase only when neither `default-push-answer` nor
+`releaseIODefaultsPushAnswer` provides an answer.
 
 Read next:
 
@@ -73,17 +90,32 @@ lazy val api  = (project in file("api"))
 lazy val root = (project in file("."))
   .aggregate(core, api)
   .enablePlugins(MonorepoReleasePlugin)
+  .settings(
+    // Keep the first release local; re-enable these phases when ready.
+    releaseIOMonorepoPolicyEnablePublish := false,
+    releaseIOMonorepoPolicyEnablePush    := false
+  )
 ```
 
 Each subproject needs its own `version.sbt` containing `version := "0.1.0-SNAPSHOT"`.
 The monorepo plugin depends on the core plugin, so the shared `releaseIO*` keys are
 available transitively. Use `releaseIOMonorepo` to drive a release.
 
-First command:
+Initialize Git if necessary, then commit the build and per-project version files so the working
+tree is clean. That setup commit also verifies the author identity needed by the release commits.
+Run the first preflight:
 
 ```bash
 sbt "releaseIOMonorepo check with-defaults"
 ```
+
+The starter policy settings avoid publish-target and upstream checks and keep a subsequent full
+release local. Before re-enabling publish, configure each project's `publishTo` and credentials
+(or set `publish / skip := true`). Before re-enabling push, make sure the current branch tracks a
+writable upstream that permits branch updates and, when tagging is enabled, permits tag updates
+and supports atomic multi-ref pushes. `with-defaults` supplies the built-in yes answer for an
+enabled push phase only when neither `default-push-answer` nor `releaseIODefaultsPushAnswer`
+provides an answer.
 
 Read next:
 

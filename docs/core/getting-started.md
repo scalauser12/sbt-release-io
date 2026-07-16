@@ -36,6 +36,30 @@ The plugin reads and writes this file during the release. The file path and form
 > a tag name or commit message cannot cross the process boundary, rather than silently
 > corrupting it.
 
+## Prepare a safe local rehearsal
+
+Keep publishing and pushing out of the lifecycle while learning the command:
+
+```scala
+// build.sbt
+releaseIOPolicyEnablePublish := false
+releaseIOPolicyEnablePush    := false
+```
+
+The command requires a Git repository, and its clean-working-tree validation includes the build
+files you just added. A full release also creates two Git commits, so configure an author identity.
+Initialize Git if necessary, then commit `project/plugins.sbt`, the version file, and the rehearsal
+settings before running `check`; that setup commit verifies the required identity:
+
+```bash
+git init                       # only for a project that is not already a Git repository
+git add project/plugins.sbt version.sbt build.sbt
+git commit -m "Configure sbt-release-io rehearsal"
+```
+
+If the project already has uncommitted work, commit or stash it instead of adding unrelated
+changes to this setup commit.
+
 ## Usage
 
 Start by inspecting the built-in command help:
@@ -44,13 +68,18 @@ Start by inspecting the built-in command help:
 sbt "releaseIO help"
 ```
 
-Run a preflight to validate the release setup without side effects:
+Run a preflight to validate the release setup without performing release actions:
 
 ```bash
 sbt "releaseIO check with-defaults"
 ```
 
-`check` runs release-step validations and reports the planned release with no release side effects: no version-file writes, commits, tags, publish, or push. When runtime hooks can no longer change them, it also resolves versions and tag names; otherwise it marks them as not evaluated. With cross-build validation enabled, sbt may temporarily switch Scala versions during validation and then restore the entry version.
+`check` runs release-step validations and reports the planned release with no release side effects:
+no version-file writes, commits, tags, publish, or push. It still invokes validation functions,
+including `precondition` hooks, so custom validation code should not perform durable external
+side effects. When runtime hooks can no longer change them, `check` also resolves versions and
+tag names; otherwise it marks them as not evaluated. With cross-build validation enabled, sbt
+may temporarily switch Scala versions during validation and then restore the entry version.
 
 Run the release (versions computed from `version.sbt`):
 
@@ -58,14 +87,38 @@ Run the release (versions computed from `version.sbt`):
 sbt "releaseIO with-defaults"
 ```
 
+With the rehearsal policies above, this full release remains local: it writes the version file,
+creates the release commits and tag, but neither publishes nor pushes. Review the rollback steps
+in [Operations](operations.md#rollback-push-has-not-happened) before running it in a repository
+whose local history matters.
+
 Default version resolution strips `-SNAPSHOT` to produce the release version (for example,
 `0.1.0-SNAPSHOT` → `0.1.0`) and bumps the bugfix component for the next snapshot
-(→ `0.1.1-SNAPSHOT`). Non-interactive runs accept those suggested versions even without
+(→ `0.1.1-SNAPSHOT`). Non-interactive full releases accept those suggested versions even without
 `with-defaults`; that flag supplies the built-in answers for the other release decisions,
-including opting in to push. To bump a different component, set `releaseIOVersioningBump`
+including a yes fallback for push when neither `default-push-answer` nor
+`releaseIODefaultsPushAnswer` supplies one. The rehearsal push policy removes the push phase
+entirely, so the flag cannot re-enable it. To bump a different component, set
+`releaseIOVersioningBump`
 (see [Version bump types](reference.md#version-bump-types)), or pass `release-version` /
 `next-version` to override explicitly. If a release fails mid-way, see
 [Recovery and rollback](operations.md#recovery-and-rollback).
+
+Before a production release, remove the rehearsal policies and configure:
+
+- `publishTo` for every publishing project (or `publish / skip := true` where appropriate), plus
+  the credentials required by the target repository
+- a writable tracking remote and upstream branch that permit branch updates and, when tagging is
+  enabled, permit tag updates and support atomic multi-ref pushes
+
+The default tagged release pushes the branch and tag together with `git push --atomic`. A remote
+without that capability can pass the earlier upstream and tag checks but fail at the final push
+after artifacts have been published.
+
+Once `releaseIOPolicyEnablePush` is enabled again, `with-defaults` supplies a yes fallback only
+when neither `default-push-answer` nor `releaseIODefaultsPushAnswer` provides an answer. Pass
+`default-push-answer n` or configure `releaseIODefaultsPushAnswer := Some(false)` when a production
+run should not push automatically.
 
 Or specify versions explicitly:
 

@@ -288,8 +288,9 @@ Notes:
   `ReleaseResourceHookIO.precondition` so `check` rehearses them upfront; for guards
   that genuinely need the resource, use `sideEffect` and accept that `check` cannot
   rehearse them.
-- `run` acquires the resource once via `Resource.use`, executes compiled hooks with the
-  resource value, then releases it.
+- A full release acquires the resource once via `Resource.use`, executes compiled hooks with the
+  resource value, then releases it. There is no `run` subcommand; invoke the custom command
+  directly, optionally with flags as in the example above.
 - `ReleasePluginIOLike` declares `autoImport` as `final`, so a custom plugin inherits the
   same grouped keys and cannot override them. In `.sbt` files, bare `releaseIO*` keys still work
   automatically when the plugin is enabled. In `.scala` sources under `project/`, import grouped

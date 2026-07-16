@@ -142,12 +142,37 @@ tag is actually free. Opt out by setting `mayChangeTagSettings = true` on the
 hook:
 
 ```scala
+import sbt.*
+import _root_.cats.effect.IO
+import _root_.io.release.monorepo.MonorepoProjectHookIO
+
 releaseIOMonorepoHooksBeforeTag += MonorepoProjectHookIO
-  .sideEffect("rewrite-tag-name") { (project, ctx) =>
-    IO.blocking { /* mutate releaseIOMonorepoVcsTagName via appendWithSession … */ }
+  .transform("rewrite-tag-name") { (_, ctx) =>
+    IO.blocking {
+      val extracted = Project.extract(ctx.state)
+      val updated   = extracted.appendWithSession(
+        Seq(
+          releaseIOMonorepoVcsTagName := { (projectName: String, version: String) =>
+            s"$projectName/v$version-custom"
+          }
+        ),
+        ctx.state
+      )
+      ctx.withState(updated)
+    }
   }
   .copy(mayChangeTagSettings = true)
 ```
+
+Use `transform`, capture the `State` returned by `appendWithSession`, and return it through
+`ctx.withState`. A `sideEffect` hook deliberately preserves its input context, so discarding
+the returned `State` would also discard the session-setting update.
+
+Project selection and change detection run before this session-only hook. The example therefore
+adds a suffix while keeping its tags inside the default `<project>/v*` detection glob. To move
+tags into a different namespace, configure `releaseIOMonorepoVcsTagName` persistently before
+selection or provide a matching custom change detector; otherwise a fresh sbt run cannot find
+the previous release tags and conservatively treats every project as changed.
 
 The lifecycle then skips the early conflict preflight for that release. After all
 `beforeTag` hooks, a late batch guard still resolves the final names, validates each
@@ -168,8 +193,26 @@ The same flag works on `MonorepoGlobalResourceHookIO` and `MonorepoProjectResour
 — set `mayChangeTagSettings = true` and the resource-aware hook opts out the same way:
 
 ```scala
+import sbt.*
+import _root_.cats.effect.IO
+import _root_.io.release.monorepo.MonorepoProjectResourceHookIO
+
+// HttpClient is the resource type supplied by the custom plugin.
 MonorepoProjectResourceHookIO
-  .sideEffect[HttpClient]("rewrite-tag-name") { (client, project, ctx) => /* … */ }
+  .transform[HttpClient]("rewrite-tag-name") { (_, _, ctx) =>
+    IO.blocking {
+      val extracted = Project.extract(ctx.state)
+      val updated   = extracted.appendWithSession(
+        Seq(
+          releaseIOMonorepoVcsTagName := { (projectName: String, version: String) =>
+            s"$projectName/v$version-custom"
+          }
+        ),
+        ctx.state
+      )
+      ctx.withState(updated)
+    }
+  }
   .copy(mayChangeTagSettings = true)
 ```
 
@@ -338,7 +381,7 @@ Notes:
   guards (branch checks, required-file presence) use `precondition` so `check` rehearses
   them upfront; for guards that genuinely need the resource value, use `sideEffect` and
   accept that `check` cannot rehearse them
-- `run` acquires the resource once, executes compiled hooks, then releases it
+- a full release acquires the resource once, executes compiled hooks, then releases it
 - protected behavior hooks default to the corresponding `releaseIOMonorepoBehavior*`
   settings and are intended for custom plugin authors, not ordinary `build.sbt`
   customization

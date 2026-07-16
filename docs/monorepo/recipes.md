@@ -57,12 +57,15 @@ releaseIOMonorepoHooksBeforePublish +=
 
 ## CI/CD integration
 
-The plugin defaults to non-interactive mode (`releaseIOMonorepoBehaviorInteractive := false`), so it works in CI without extra configuration. Pass `with-defaults` to accept the computed release/next versions without confirmation, and supply versions explicitly.
+The plugin defaults to non-interactive mode (`releaseIOMonorepoBehaviorInteractive := false`), so
+it works in CI without extra configuration. Pass `with-defaults` for the built-in safety
+decisions, supply versions explicitly, and pass `default-push-answer y` when the workflow must
+push regardless of `releaseIODefaultsPushAnswer`.
 
 ### Per-project version overrides
 
 ```bash
-sbt "releaseIOMonorepo with-defaults release-version core=1.0.0 release-version api=2.0.0 next-version core=1.1.0-SNAPSHOT next-version api=2.1.0-SNAPSHOT"
+sbt "releaseIOMonorepo with-defaults default-push-answer y release-version core=1.0.0 release-version api=2.0.0 next-version core=1.1.0-SNAPSHOT next-version api=2.1.0-SNAPSHOT"
 ```
 
 ### GitHub Actions example
@@ -102,7 +105,7 @@ jobs:
           CORE_RELEASE_VERSION: ${{ github.event.inputs.core_version }}
           CORE_NEXT_VERSION: ${{ github.event.inputs.core_next_version }}
         run: |
-          sbt "releaseIOMonorepo core with-defaults release-version core=$CORE_RELEASE_VERSION next-version core=$CORE_NEXT_VERSION"
+          sbt "releaseIOMonorepo core with-defaults default-push-answer y release-version core=$CORE_RELEASE_VERSION next-version core=$CORE_NEXT_VERSION"
 ```
 
 > **Note:** `fetch-depth: 0` is important — change detection uses `git diff` against the last tag, so shallow clones may produce incorrect results.
@@ -112,6 +115,9 @@ The release command runs `publish-artifacts` by default. Configure the project-s
 GitHub Actions secrets. The `contents: write` permission covers Git commits, tags, and push only;
 it does not grant access to an artifact repository. If this workflow should not publish, disable
 the publish phase explicitly with `releaseIOMonorepoPolicyEnablePublish := false`.
+The push target must permit branch updates and, when tagging is enabled, permit tag updates and
+support atomic multi-ref pushes. An unsupported remote can fail at the final push after artifacts
+have been published.
 
 Use an explicit project selector in CI when you intend to release only one project. Version
 overrides force-include their target, but they do not narrow change-detection selection on their own.

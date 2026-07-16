@@ -9,13 +9,21 @@ uploading archives to a file repository, calling REST APIs, or streaming data.
 
 Some libraries that work well in hook bodies and resource-aware custom plugins:
 
-| Library               | Use case                                          | sbt 1 (Scala 2.12)        | sbt 2 (Scala 3) |
-| --------------------- | ------------------------------------------------- | ------------------------- | --------------- |
-| `http4s-ember-client` | HTTP requests (upload artifacts, notify services) | 0.23.x (1.x dropped 2.12) | 0.23.x or 1.x   |
-| `fs2-io`              | Streaming file I/O, process execution             | 3.x                       | 3.x             |
-| `circe`               | JSON encoding/decoding for API calls              | 0.14.x                    | 0.14.x          |
-| `doobie`              | JDBC database access (record release metadata)    | 1.x                       | 1.x             |
-| `sttp-client3` / `sttp-client4` | Lightweight HTTP client with cats-effect backend | 3.x                | 3.x or 4.x      |
+| Library               | Use case                                          | sbt 1 (Scala 2.12)               | sbt 2 (Scala 3)        |
+| --------------------- | ------------------------------------------------- | -------------------------------- | ---------------------- |
+| `http4s-ember-client` | HTTP requests (upload artifacts, notify services) | 0.23.x (stable)                   | 0.23.x or 1.0 milestones |
+| `fs2-io`              | Streaming file I/O, process execution             | 3.x                              | 3.x                    |
+| `circe`               | JSON encoding/decoding for API calls              | 0.14.x                           | 0.14.x                 |
+| `doobie`              | JDBC database access (record release metadata)    | 1.0.0-RC releases                | 1.0.0-RC releases      |
+| `sttp-client3` / `sttp-client4` | Lightweight HTTP client with cats-effect backend | 3.x (`client3`) or 4.x (`client4`) | 3.x (`client3`) or 4.x (`client4`) |
+
+The [http4s version matrix](https://http4s.org/versions.html) identifies 0.23 as the stable line;
+the Scala 2.13/3-only 1.0 line is still published as milestones. The
+[doobie documentation](https://typelevel.org/doobie/) currently documents 1.0 release candidates
+for Scala 2.12, 2.13, and 3. The
+[sttp 4 backend matrix](https://sttp.softwaremill.com/en/stable/backends/summary.html) confirms that
+its backends, including cats-effect backends, are available for Scala 2.12 as well as Scala 2.13
+and 3. Check those upstream pages for current versions before choosing a dependency.
 
 Add the dependency in `project/plugins.sbt` alongside the plugin. This adds the library to the
 *build's* classpath, where hooks run — not to your project's runtime dependencies.

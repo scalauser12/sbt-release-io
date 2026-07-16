@@ -28,6 +28,13 @@ a project's last tag, that project is also marked as changed.
 
 Any git command failure conservatively treats the project as changed.
 
+## Disabling change detection
+
+Setting `releaseIOMonorepoDetectionEnabled := false` does not select zero projects. When a
+release has no explicit project selectors, it treats every project in
+`releaseIOMonorepoSelectionProjects` as changed. Explicit selectors still narrow the release
+to the named projects.
+
 ## Downstream dependents
 
 By default, only projects with direct file changes are released. If `core` changes and `api` depends on `core`, `api` is **not** released unless it also has file changes.

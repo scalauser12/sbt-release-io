@@ -21,6 +21,8 @@ The release engine validates the planned lifecycle before it performs any releas
 That means `releaseIO check` can run validations and print the plan without writing version
 files, creating commits or tags, publishing, or pushing. When runtime hooks can no longer
 change them, it also resolves versions and tags; otherwise it marks them as not evaluated.
+Custom validation functions and `precondition` hooks still execute in this mode, so hook authors
+should keep validation code free of durable external side effects.
 
 ## Execution model: sbt-release-io vs sbt-release
 
