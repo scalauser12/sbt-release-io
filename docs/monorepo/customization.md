@@ -118,7 +118,12 @@ releaseIOMonorepoHooksAfterTag += markerHook("after-tag")
 
 Hook semantics:
 
-- `beforeX` / `afterX` hooks run only when phase `X` is present in the compiled lifecycle (so disabled phases also disable their hooks)
+- `beforeX` / `afterX` hooks are included only when phase `X` is present in the compiled
+  lifecycle (so disabled phases also disable their hooks)
+- `beforePublish` runs only when publishing will run for the current project and cross-build
+  iteration; `afterPublish` runs only after publishing actually succeeds
+- `beforePush` is skipped when push has already been deterministically declined; `afterPush`
+  runs only after an actual successful push
 - global lifecycle points use `MonorepoGlobalHookIO`
 - per-project lifecycle points use `MonorepoProjectHookIO`
 - `releaseIOMonorepo check` validates the same hook and policy configuration the real
@@ -230,13 +235,15 @@ import _root_.cats.effect.IO
 import _root_.io.release.monorepo.MonorepoProjectHookIO
 
 releaseIOMonorepoHooksAfterTag +=
-  MonorepoProjectHookIO.sideEffect("notify-tagged") { (project, _) =>
+  MonorepoProjectHookIO.sideEffect("report-tag") { (project, _) =>
     val tagName = project.tagName.getOrElse("unknown-tag")
-    IO.println(s"[monorepo] tagged ${project.name} as $tagName")
+    IO.println(s"[monorepo] ${project.name} uses tag $tagName")
   }
 ```
 
-`afterTag` hooks are where `project.tagName` reflects the finalized tag name that was created.
+`afterTag` hooks are where `project.tagName` reflects the finalized tag name used by
+`tag-releases`, whether the tag was newly created, overwritten, or kept because it already
+pointed at the expected commit.
 
 ## Custom plugins with shared resources
 
