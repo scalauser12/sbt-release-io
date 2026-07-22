@@ -4,6 +4,68 @@ This changelog aggregates the published GitHub releases for
 [`scalauser12/sbt-release-io`](https://github.com/scalauser12/sbt-release-io).
 This file is the canonical release history for the repository.
 
+## v0.13.7
+
+Published: 2026-07-22<br>
+GitHub release: [v0.13.7](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.13.7)
+
+`v0.13.7` is a patch release for both plugins that hardens core aggregate
+publishing and version/tag preflight, guards late-bound version-file writes,
+and makes sbt 2 the canonical publishing lane.
+
+### Compatibility notes
+
+- No public API removals or source incompatibilities are intended in this
+  release.
+- The supported build lines remain sbt `1.12.3` and sbt `2.0.0`, both on
+  JDK 17 or newer.
+- Releases remain published only from pushed `v*` tags through GitHub Actions.
+
+### Fixes
+
+- Validate that every non-skipped project reached through the core publish
+  aggregate uses the single resolved release version, both before release
+  mutations and immediately before each publish task graph runs.
+- Run only eligible aggregate publish roots, so `publish / skip := true` also
+  suppresses custom publish actions that do not inspect the skip setting.
+- Preserve validation-time publish eligibility as an upper bound across
+  execution and cross-build iterations while keeping before/after-publish hook
+  gates aligned with the selected publish batch.
+- Account for modified, staged, and untracked configured version files when
+  deciding whether the core release needs a commit and which commit a tag
+  preflight must target.
+- Reject missing late-bound version files before either core or monorepo writes
+  can create them, while preserving explicit version pairs installed by hooks.
+
+### Improvements
+
+- Consolidate core publish validation metadata and execute eligible scoped
+  publish actions in one selected sbt task graph.
+- Expand tests for aggregate version mismatches, publish-skip drift, custom
+  actions, late-bound version files, lifecycle validation, and version commits.
+
+### CI & Build
+
+- Make sbt `2.0.0` the default build and Maven Central publishing lane while
+  retaining sbt `1.12.3` as the explicit compatibility lane.
+- Require JDK 17 or newer and keep the supported sbt versions in dedicated
+  pinned files used by local commands and CI.
+
+### Documentation
+
+- Clarify aggregate publishing, validation/check semantics, hooks, policy
+  settings, version files, and first-run release setup across the guides and
+  references.
+- Refresh the root README, module READMEs, and published walkthroughs to
+  reference `0.13.7`.
+
+### Verification
+
+- `git diff --check`
+- GitHub Actions on `main`: formatting checks; sbt 1.12.3 and sbt 2.0.0 unit
+  tests; core and monorepo scripted tests on both sbt lines; publish-local smoke
+  on both sbt lines.
+
 ## v0.13.6
 
 Published: 2026-07-13<br>
