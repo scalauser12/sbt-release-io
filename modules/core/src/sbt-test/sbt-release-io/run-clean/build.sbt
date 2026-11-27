@@ -1,5 +1,5 @@
 name         := "run-clean-test"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 val seedStaleFile          = taskKey[Unit]("Create a stale file under the build target")
 val assertStaleFileExists  = taskKey[Unit]("Assert the stale file exists under the active target")

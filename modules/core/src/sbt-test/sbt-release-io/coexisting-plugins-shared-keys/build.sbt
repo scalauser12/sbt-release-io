@@ -86,7 +86,7 @@ def writeNestedBuild(base: File, sbtVersion0: String, pluginVersion: String): Un
        |  .enablePlugins(ReleasePluginIO, MonorepoReleasePlugin)
        |  .settings(
        |    name := "nested-coexisting-plugins",
-       |    scalaVersion := "2.12.18",
+       |    scalaVersion := "2.12.21",
        |    releaseIOVcsIgnoreUntrackedFiles := true
        |  )
        |""".stripMargin
@@ -95,7 +95,7 @@ def writeNestedBuild(base: File, sbtVersion0: String, pluginVersion: String): Un
 }
 
 name         := "coexisting-plugins-shared-keys"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 checkCoexistence := {
   val pluginVersion = sys.props.getOrElse("plugin.version", sys.error("plugin.version not set"))

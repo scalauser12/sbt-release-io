@@ -2,7 +2,7 @@ import scala.sys.process.*
 import sbt.IO
 
 name         := "publish-skip-isSnapshot-test"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 // Common version-dependent skip pattern: publish/skip is true while the version is a
 // snapshot, then flips to false after set-release-version writes the release version.

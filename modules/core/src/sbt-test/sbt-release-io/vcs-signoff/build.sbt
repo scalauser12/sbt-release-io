@@ -1,7 +1,7 @@
 import scala.sys.process.*
 
 name         := "vcs-signoff-test"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOVcsSignOff := true
 

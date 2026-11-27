@@ -3,7 +3,7 @@ import scala.sys.process.*
 lazy val core = (project in file("core"))
   .settings(
     name         := "core",
-    scalaVersion := "2.12.18"
+    scalaVersion := "2.12.21"
   )
 
 val checkSignOff = taskKey[Unit]("Verify release commits contain Signed-off-by trailer")

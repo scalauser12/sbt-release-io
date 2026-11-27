@@ -17,16 +17,16 @@ import _root_.io.release.monorepo.MonorepoProjectHookIO
 lazy val core = (project in file("core"))
   .settings(
     name               := "core",
-    scalaVersion       := "2.12.18",
-    crossScalaVersions := Seq("2.12.18", "2.13.16"),
+    scalaVersion       := "2.12.21",
+    crossScalaVersions := Seq("2.12.21", "2.13.18"),
     publish / skip     := true
   )
 
 lazy val api = (project in file("api"))
   .settings(
     name               := "api",
-    scalaVersion       := "2.12.18",
-    crossScalaVersions := Seq("2.12.18", "2.13.16"),
+    scalaVersion       := "2.12.21",
+    crossScalaVersions := Seq("2.12.21", "2.13.18"),
     publish / skip     := true
   )
 

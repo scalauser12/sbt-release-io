@@ -7,7 +7,7 @@ import sbt.IO
 // fix end-to-end: a release with a dash-prefixed version file completes and
 // the next-version commit lands cleanly.
 name                            := "dash-prefixed-version-file-test"
-scalaVersion                    := "2.12.18"
+scalaVersion                    := "2.12.21"
 
 releaseIOVersioningFile         := baseDirectory.value / "-version.sbt"
 releaseIOVersioningUseGlobal    := false

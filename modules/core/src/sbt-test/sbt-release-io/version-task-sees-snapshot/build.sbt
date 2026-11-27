@@ -2,7 +2,7 @@ import scala.sys.process.*
 import sbt.IO
 
 name         := "version-task-sees-snapshot"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 // Regression: validate-time overlay used to leak into execute via runMainSegment's
 // `validatedCtx → runActionPhase`. With `release-version 0.1.0`, the next-version

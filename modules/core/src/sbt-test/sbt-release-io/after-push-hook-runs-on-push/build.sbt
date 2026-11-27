@@ -8,7 +8,7 @@ import _root_.io.release.ReleaseHookIO
 // `markPushExecuted` wiring on the real push paths so future refactors can't
 // silently strand afterPush hooks.
 name         := "after-push-hook-runs-on-push"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOVcsIgnoreUntrackedFiles := true
 releaseIOPolicyEnableRunTests    := false

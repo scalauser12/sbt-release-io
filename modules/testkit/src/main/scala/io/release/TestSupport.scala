@@ -86,7 +86,7 @@ object TestSupport {
 
   val CurrentScalaVersion: String = scala.util.Properties.versionNumberString
   val Scala212TestVersion: String = "2.12.21"
-  val Scala213TestVersion: String = "2.13.12"
+  val Scala213TestVersion: String = "2.13.18"
 
   def alternateScalaVersion: String =
     if (CurrentScalaVersion.startsWith("2.12.")) Scala213TestVersion

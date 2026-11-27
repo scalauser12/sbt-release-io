@@ -9,7 +9,7 @@ import scala.sys.process.*
 // the final atomic push. Now the probe gates on whether `tagName` exists
 // locally, which is the authoritative signal.
 name         := "retry-tag-name-probes-remote-test"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOPolicyEnablePublish     := false
 releaseIOPolicyEnableRunClean    := false

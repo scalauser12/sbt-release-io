@@ -6,7 +6,7 @@ import sbt.Keys.*
 // an unrelated file between the pre-commit dirty check and the actual commit must
 // not slip that file into the release commit. The post-task recheck rejects it.
 name         := "commit-message-task-stages-extra"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOVcsIgnoreUntrackedFiles := true
 releaseIOPolicyEnableRunTests    := false

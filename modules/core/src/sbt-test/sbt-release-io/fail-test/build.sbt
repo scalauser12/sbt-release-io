@@ -42,9 +42,9 @@ def runNestedSbt(command: Seq[String], outputFile: File, workingDir: File): (Int
 }
 
 name         := "fail-test-test"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
-libraryDependencies += "org.scalameta" %% "munit" % "1.2.4" % Test
+libraryDependencies += "org.scalameta" %% "munit" % "1.3.6" % Test
 testFrameworks += new TestFramework("munit.Framework")
 
 expectReleaseFailure := {

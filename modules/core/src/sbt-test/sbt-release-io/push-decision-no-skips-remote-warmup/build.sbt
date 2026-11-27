@@ -9,7 +9,7 @@ import sbt.Keys.*
 // when the user has explicitly opted out of pushing — the release must succeed
 // even though the local branch has no configured upstream.
 name         := "push-decision-no-skips-remote-warmup"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOVcsIgnoreUntrackedFiles := true
 releaseIOPolicyEnableRunTests    := false

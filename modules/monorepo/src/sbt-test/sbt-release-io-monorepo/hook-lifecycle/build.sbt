@@ -7,7 +7,7 @@ import _root_.io.release.monorepo.MonorepoProjectHookIO
 lazy val core = (project in file("core"))
   .settings(
     name         := "core",
-    scalaVersion := "2.12.18",
+    scalaVersion := "2.12.21",
     publishTo    := Some(Resolver.file("test-repo", baseDirectory.value / "target" / "test-repo"))
   )
 

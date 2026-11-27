@@ -18,7 +18,7 @@ import scala.sys.process.*
 // (`validateTagName - reject ...`). Keeping the scripted test count to one
 // avoids paying the per-test sbt VM startup overhead for each pattern.
 name         := "invalid-tag-name-fails-preflight"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOVcsTagName              := "bad tag"
 releaseIOPolicyEnablePublish     := false

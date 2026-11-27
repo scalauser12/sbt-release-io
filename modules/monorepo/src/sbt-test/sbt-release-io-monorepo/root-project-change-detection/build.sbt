@@ -3,7 +3,7 @@ import scala.sys.process.*
 lazy val sub = (project in file("sub"))
   .settings(
     name         := "sub",
-    scalaVersion := "2.12.18"
+    scalaVersion := "2.12.21"
   )
 
 lazy val root = (project in file("."))
@@ -11,7 +11,7 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
     name         := "root-proj",
-    scalaVersion := "2.12.18",
+    scalaVersion := "2.12.21",
 
     // Include root project itself alongside aggregated sub-projects
     releaseIOMonorepoSelectionProjects := thisProjectRef.value +: thisProject.value.aggregate,

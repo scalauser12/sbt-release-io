@@ -11,7 +11,7 @@ import _root_.io.release.ReleaseHookIO
 // `onDeclinePush` branch. Mirrors `after-push-hook-gated` for the
 // pre-push lifecycle slot.
 name         := "before-push-hook-gated"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOVcsIgnoreUntrackedFiles := true
 releaseIOPolicyEnableRunTests    := false

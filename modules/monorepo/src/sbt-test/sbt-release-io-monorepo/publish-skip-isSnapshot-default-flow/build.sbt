@@ -3,7 +3,7 @@ import scala.sys.process.*
 lazy val core = (project in file("core"))
   .settings(
     name              := "core",
-    scalaVersion      := "2.12.18",
+    scalaVersion      := "2.12.21",
     // Common version-dependent skip pattern: publish/skip is true while the version is a
     // snapshot, then flips to false after set-release-version writes the release version.
     // This is the exact pattern that the validate-time session mutation must accommodate

@@ -1,8 +1,8 @@
 import scala.sys.process.*
 import _root_.io.release.monorepo.MonorepoProjectHookIO
 
-val Scala213 = "2.13.12"
-val Scala212 = "2.12.18"
+val Scala213 = "2.13.18"
+val Scala212 = "2.12.21"
 
 // scalaVersion set only at ThisBuild — tests GlobalScope fallback for restoration
 ThisBuild / scalaVersion := Scala213

@@ -3,7 +3,7 @@ import sbt.*
 import sbt.Keys.*
 
 name         := "publish-skip-drift-frozen"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 publish / skip := true
 

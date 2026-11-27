@@ -5,7 +5,7 @@ import _root_.io.release.monorepo.MonorepoProjectHookIO
 lazy val core = (project in file("core"))
   .settings(
     name           := "core",
-    scalaVersion   := "2.12.18",
+    scalaVersion   := "2.12.21",
     publish / skip := true,
     publish        := sbt.IO.touch(baseDirectory.value / "published")
   )

@@ -6,7 +6,7 @@ import _root_.io.release.ReleaseSessionOps
 
 name := "hook-late-bound-settings"
 
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOVcsIgnoreUntrackedFiles := true
 releaseIOPolicyEnableRunTests    := false

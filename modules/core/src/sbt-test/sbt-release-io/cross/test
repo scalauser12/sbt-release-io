@@ -7,14 +7,14 @@ $ exec git commit -m "Initial commit"
 
 # Run release WITHOUT cross flag - should only build for default Scala version (2.13)
 > releaseIO with-defaults release-version 0.1.0 next-version 0.2.0-SNAPSHOT
-$ exists marker/built-2.13.12
-$ absent marker/built-2.12.18
-$ delete marker/built-2.13.12
+$ exists marker/built-2.13.18
+$ absent marker/built-2.12.21
+$ delete marker/built-2.13.18
 
 # Run release WITH cross flag - should build for all crossScalaVersions
 > releaseIO with-defaults cross release-version 0.2.0 next-version 0.3.0-SNAPSHOT
-$ exists marker/built-2.13.12
-$ exists marker/built-2.12.18
+$ exists marker/built-2.13.18
+$ exists marker/built-2.12.21
 
 # Verify tag was created
 > checkGitTag

@@ -6,7 +6,7 @@ import scala.sys.process.*
 // non-force push of the unchanged tag is a harmless no-op. An existence-only
 // probe would wrongly abort here; the hash-aware probe must not.
 name         := "keep-tag-remote-match-proceeds-test"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOPolicyEnablePublish     := false
 releaseIOPolicyEnableRunClean    := false

@@ -5,7 +5,7 @@ import sbt.Keys.*
 lazy val child = (project in file("child"))
   .settings(
     name         := "mismatched-child",
-    scalaVersion := "2.12.18",
+    scalaVersion := "2.12.21",
     version      := "9.9.9",
     publishTo    := Some(Resolver.file("local", baseDirectory.value / "publish-target")),
     releaseIOPublishAction :=
@@ -16,7 +16,7 @@ lazy val root = (project in file("."))
   .aggregate(child)
   .settings(
     name         := "publish-multi-project-version-mismatch",
-    scalaVersion := "2.12.18",
+    scalaVersion := "2.12.21",
     publishTo    := Some(Resolver.file("local", baseDirectory.value / "publish-target")),
     releaseIOPublishAction :=
       IO.touch(baseDirectory.value / "root-published.marker"),

@@ -12,7 +12,7 @@ import sbt.IO
 lazy val core = (project in file("core"))
   .settings(
     name           := "core",
-    scalaVersion   := "2.12.18",
+    scalaVersion   := "2.12.21",
     publish / skip := isSnapshot.value,
     publishTo      := Some(
       Resolver.file("local-test", baseDirectory.value.getParentFile / "publish-target")

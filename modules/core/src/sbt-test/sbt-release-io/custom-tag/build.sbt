@@ -1,7 +1,7 @@
 import scala.sys.process.*
 
 name         := "custom-tag-test"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 // Custom tag name with prefix (version is evaluated at tag time via reapply)
 releaseIOVcsTagName := s"release-${version.value}"

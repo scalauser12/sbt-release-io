@@ -2,7 +2,7 @@ import scala.sys.process.*
 import sbt.IO
 
 name         := "modified-files-fail-test"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOPolicyEnablePublish := false
 releaseIOPolicyEnablePush    := false

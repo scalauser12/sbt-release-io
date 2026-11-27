@@ -6,8 +6,8 @@ import scala.sys.process.*
 lazy val api = (project in file("services/api"))
   .settings(
     name                                   := "api",
-    scalaVersion                           := "2.12.18",
-    libraryDependencies += "org.scalameta" %% "munit" % "1.2.4" % Test,
+    scalaVersion                           := "2.12.21",
+    libraryDependencies += "org.scalameta" %% "munit" % "1.3.6" % Test,
     testFrameworks += new TestFramework("munit.Framework"),
     publishTo                              := Some(Resolver.file("api-test-repo", baseDirectory.value / "repo")),
     Test / testOptions += Tests.Setup(() =>
@@ -25,8 +25,8 @@ lazy val services = (project in file("services"))
   .aggregate(api)
   .settings(
     name                                   := "services",
-    scalaVersion                           := "2.12.18",
-    libraryDependencies += "org.scalameta" %% "munit" % "1.2.4" % Test,
+    scalaVersion                           := "2.12.21",
+    libraryDependencies += "org.scalameta" %% "munit" % "1.3.6" % Test,
     testFrameworks += new TestFramework("munit.Framework"),
     publishTo                              := Some(
       Resolver.file("services-test-repo", baseDirectory.value / "repo")
@@ -47,7 +47,7 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
     name         := "transitive-agg-test",
-    scalaVersion := "2.12.18",
+    scalaVersion := "2.12.21",
 
     // Do NOT override releaseIOMonorepoSelectionProjects — use the default
     // which should transitively discover: services, api

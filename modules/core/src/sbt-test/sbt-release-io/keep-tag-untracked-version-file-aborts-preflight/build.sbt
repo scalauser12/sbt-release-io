@@ -4,7 +4,7 @@ import scala.sys.process.*
 // The release commit will therefore add the file even though the write itself is a no-op.
 // Keeping a tag at the current HEAD must be rejected by tag preflight before that commit.
 name         := "keep-tag-untracked-version-file-aborts-preflight-test"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOPolicyEnablePublish     := false
 releaseIOPolicyEnablePush        := false

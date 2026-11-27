@@ -12,7 +12,7 @@ ThisBuild / releaseIODefaultsPushAnswer      := Some(false)
 ThisBuild / releaseIOVcsIgnoreUntrackedFiles := true
 
 name         := "thisbuild-decision-default-honored"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOPolicyEnableRunTests := false
 releaseIOPolicyEnablePublish  := false

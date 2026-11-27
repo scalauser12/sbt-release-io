@@ -1,7 +1,7 @@
 lazy val lib = (project in file("lib"))
   .settings(
     name                   := "lib",
-    scalaVersion           := "2.12.18",
+    scalaVersion           := "2.12.21",
     // Custom publish action: write a marker file
     releaseIOPublishAction := {
       val marker = baseDirectory.value / "marker" / "publish.log"
@@ -14,7 +14,7 @@ lazy val root = (project in file("."))
   .aggregate(lib)
   .settings(
     name           := "publish-skip-root-test",
-    scalaVersion   := "2.12.18",
+    scalaVersion   := "2.12.21",
     publish / skip := true,
 
     releaseIOPublishChecks := false,

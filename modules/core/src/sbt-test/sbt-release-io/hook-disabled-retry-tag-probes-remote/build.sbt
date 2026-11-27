@@ -13,7 +13,7 @@ import _root_.io.release.ReleaseHookIO
 // landed. The callback observes the FINAL resolved tag name (v0.2.0) so the
 // abort happens before `vcs.tag` creates the local replacement.
 name         := "hook-disabled-retry-tag-probes-remote-test"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOPolicyEnablePublish     := false
 releaseIOPolicyEnableRunClean    := false

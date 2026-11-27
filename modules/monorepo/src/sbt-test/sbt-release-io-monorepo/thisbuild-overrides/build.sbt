@@ -15,7 +15,7 @@ ThisBuild / releaseIOMonorepoDetectionEnabled           := false
 ThisBuild / releaseIOMonorepoDetectionIncludeDownstream := true
 
 lazy val core = (project in file("core"))
-  .settings(name := "core", scalaVersion := "2.12.18")
+  .settings(name := "core", scalaVersion := "2.12.21")
 
 lazy val root = (project in file("."))
   .aggregate(core)

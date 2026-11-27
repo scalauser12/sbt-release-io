@@ -1,5 +1,5 @@
 name         := "custom-publish-action-test"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 // Override the publish action to write a marker file instead of actually publishing
 releaseIOPublishAction := {

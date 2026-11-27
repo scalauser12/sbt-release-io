@@ -4,7 +4,7 @@ import _root_.io.release.monorepo.MonorepoProjectHookIO
 lazy val core = (project in file("core"))
   .settings(
     name           := "core",
-    scalaVersion   := "2.12.18",
+    scalaVersion   := "2.12.21",
     // publishTo is intentionally NOT set
     // But publish / skip := true bypasses the publishTo check
     publish / skip := true

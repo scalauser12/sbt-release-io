@@ -13,10 +13,10 @@ object BuildVersions {
   val sbt2Version             = readVersionFile("project/sbt2.version")
   val scala212                = "2.12.21"
   val scala3                  = "3.8.4"
-  val catsEffectVersion       = "3.7.0"
-  val munitVersion            = "1.3.0"
-  val munitCatsEffectVersion  = "2.2.0"
-  val scalametaParsersVersion = "4.16.1"
+  val catsEffectVersion       = "3.7.1"
+  val munitVersion            = "1.3.6"
+  val munitCatsEffectVersion  = "2.2.1"
+  val scalametaParsersVersion = "4.17.4"
 }
 
 object BuildSettings {

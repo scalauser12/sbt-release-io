@@ -4,7 +4,7 @@ import _root_.io.release.monorepo.MonorepoGlobalHookIO
 lazy val core = (project in file("core"))
   .settings(
     name           := "core",
-    scalaVersion   := "2.12.18",
+    scalaVersion   := "2.12.21",
     publish / skip := false,
     publishTo      := Some(Resolver.file("local-test", baseDirectory.value / "repo")),
     publish        := sbt.IO.touch(baseDirectory.value.getParentFile / "published")
@@ -42,7 +42,7 @@ lazy val root = (project in file("."))
                     Project
                       .extract(state)
                       .appendWithSession(
-                        Seq(releaseProject.ref / scalaVersion := "2.13.16"),
+                        Seq(releaseProject.ref / scalaVersion := "2.13.18"),
                         state
                       )
                   }

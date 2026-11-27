@@ -150,15 +150,15 @@ Building this repository requires JDK 17 or newer because sbt 2 is the default l
 
 ```bash
 # sbt 1 / Scala 2.12 compatibility lane (version pinned in project/sbt1.version)
-sbt --server --sbt-version 1.12.3 compile
-sbt --server --sbt-version 1.12.3 test
-sbt --server --sbt-version 1.12.3 core/test
-sbt --server --sbt-version 1.12.3 monorepo/test
-sbt --server --sbt-version 1.12.3 scripted
+sbt --server --sbt-version 1.13.1 compile
+sbt --server --sbt-version 1.13.1 test
+sbt --server --sbt-version 1.13.1 core/test
+sbt --server --sbt-version 1.13.1 monorepo/test
+sbt --server --sbt-version 1.13.1 scripted
 
 # sbt 2 / Scala 3 default lane (pinned in project/build.properties and project/sbt2.version)
-sbt --server --sbt-version 2.0.0 compile  # direct sbt 2 lane
-sbt --server --sbt-version 2.0.0 test
+sbt --server --sbt-version 2.0.12 compile  # direct sbt 2 lane
+sbt --server --sbt-version 2.0.12 test
 ./bin/sbt2-clean test                # same lane from a filtered current-working-tree copy
 ./bin/sbt2-clean core/scripted       # core scripted tests on sbt 2
 ./bin/sbt2-clean monorepo/scripted   # monorepo scripted tests on sbt 2
@@ -172,7 +172,7 @@ sbt scalafmtSbtCheck     # verify sbt/build file formatting
 
 The explicit compatibility commands use `--server --sbt-version` so the sbt 1 override wins
 even though `project/build.properties` selects sbt 2 and enables its native client by default.
-Plain `sbt ...` uses sbt 2.0.0 from `project/build.properties`. Prefer
+Plain `sbt ...` uses sbt 2.0.12 from `project/build.properties`. Prefer
 `./bin/sbt2-clean ...` for local sbt 2 verification: it copies the current working tree to a
 temporary directory while filtering known generated IDE/build files such as
 `project/metals.sbt` and `.bloop/`. Non-excluded untracked files are included. CI runs on a clean
@@ -180,9 +180,9 @@ checkout and uses the explicitly pinned sbt version for each lane.
 
 ## Compatibility
 
-- **sbt**: 1.12.3 and 2.0.0
+- **sbt**: 1.13.1 and 2.0.12
 - **Scala**: 2.12 (sbt 1) / Scala 3 (sbt 2) — plugin compile targets, not constraints on your project's Scala version
-- **cats-effect**: 3.7.0
+- **cats-effect**: 3.7.1
 - **VCS**: Git only
 
 ## License
