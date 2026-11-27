@@ -7,7 +7,7 @@ lazy val root = (project in file("."))
   .aggregate(libA, libB)
   .settings(
     name                             := "publish-multi-project-manifest-test",
-    scalaVersion                     := "2.12.18",
+    scalaVersion                     := "2.12.21",
     publishTo                        := Some(Resolver.file("test-repo", baseDirectory.value / "target" / "test-repo")),
     releaseIOVcsIgnoreUntrackedFiles := true,
     releaseIOPolicyEnablePush        := false,
@@ -17,13 +17,13 @@ lazy val root = (project in file("."))
 
 lazy val libA = (project in file("libA"))
   .settings(
-    scalaVersion := "2.12.18",
+    scalaVersion := "2.12.21",
     publishTo    := Some(Resolver.file("test-repo", baseDirectory.value / "target" / "test-repo"))
   )
 
 lazy val libB = (project in file("libB"))
   .settings(
-    scalaVersion := "2.12.18",
+    scalaVersion := "2.12.21",
     publishTo    := Some(Resolver.file("test-repo", baseDirectory.value / "target" / "test-repo"))
   )
 

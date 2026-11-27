@@ -1,8 +1,8 @@
 import scala.sys.process.*
 import sbt.IO
 
-val Scala213 = "2.13.12"
-val Scala212 = "2.12.18"
+val Scala213 = "2.13.18"
+val Scala212 = "2.12.21"
 
 name := "snapshot-deps-cross-test"
 

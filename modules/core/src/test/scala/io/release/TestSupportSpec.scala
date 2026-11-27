@@ -27,9 +27,9 @@ class TestSupportSpec extends CatsEffectSuite {
         assert(!buildSettings.contains("project/build.properties"))
         assert(buildSettings.contains("project/sbt1.version"))
         assert(buildSettings.contains("project/sbt2.version"))
-        assertEquals(buildProperties, "sbt.version=2.0.0")
-        assertEquals(sbt1Version, "1.12.3")
-        assertEquals(sbt2Version, "2.0.0")
+        assertEquals(buildProperties, s"sbt.version=$sbt2Version")
+        assert(sbt1Version.startsWith("1."))
+        assert(sbt2Version.startsWith("2."))
       } finally sys.props("user.dir") = originalWd
     }
   }

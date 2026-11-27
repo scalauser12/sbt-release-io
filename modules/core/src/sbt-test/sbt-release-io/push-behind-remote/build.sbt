@@ -1,7 +1,7 @@
 import scala.sys.process.*
 
 name         := "push-behind-remote-test"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOPolicyEnablePublish     := false
 releaseIOPolicyEnableRunClean    := false

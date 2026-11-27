@@ -1,8 +1,8 @@
 import _root_.cats.effect.IO
 import _root_.io.release.monorepo.MonorepoProjectHookIO
 
-val ScalaA = "2.12.18"
-val ScalaB = "2.13.16"
+val ScalaA = "2.12.21"
+val ScalaB = "2.13.18"
 
 lazy val core = (project in file("core"))
   .settings(

@@ -4,21 +4,21 @@ import _root_.io.release.monorepo.MonorepoProjectHookIO
 lazy val core = (project in file("core"))
   .settings(
     name         := "core",
-    scalaVersion := "2.12.18"
+    scalaVersion := "2.12.21"
   )
 
 lazy val middle = (project in file("middle"))
   .dependsOn(core)
   .settings(
     name         := "middle",
-    scalaVersion := "2.12.18"
+    scalaVersion := "2.12.21"
   )
 
 lazy val api = (project in file("api"))
   .dependsOn(middle)
   .settings(
     name         := "api",
-    scalaVersion := "2.12.18"
+    scalaVersion := "2.12.21"
   )
 
 val checkAll        = taskKey[Unit]("Run all verification checks")

@@ -8,7 +8,7 @@ import _root_.io.release.monorepo.ProjectReleaseInfo
 lazy val core = (project in file("core"))
   .settings(
     name           := "core",
-    scalaVersion   := "2.12.18",
+    scalaVersion   := "2.12.21",
     publish / skip := Def.task {
       sbt.IO.touch(baseDirectory.value.getParentFile / "skip-evaluated")
       false

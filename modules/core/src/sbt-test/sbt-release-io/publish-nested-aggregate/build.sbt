@@ -5,14 +5,14 @@ import scala.sys.process.*
 
 lazy val libB = (project in file("libB"))
   .settings(
-    scalaVersion := "2.12.18"
+    scalaVersion := "2.12.21"
     // No publishTo, no publish/skip
   )
 
 lazy val libA = (project in file("libA"))
   .aggregate(libB)
   .settings(
-    scalaVersion := "2.12.18",
+    scalaVersion := "2.12.21",
     publishTo    := Some(Resolver.file("file", new File(".")))
   )
 
@@ -20,7 +20,7 @@ lazy val root = (project in file("."))
   .aggregate(libA)
   .settings(
     name                             := "publish-nested-aggregate-test",
-    scalaVersion                     := "2.12.18",
+    scalaVersion                     := "2.12.21",
     publishTo                        := Some(Resolver.file("file", new File("."))),
     releaseIOVcsIgnoreUntrackedFiles := true,
     releaseIOPolicyEnablePush        := false,

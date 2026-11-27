@@ -5,7 +5,7 @@ import java.util.jar.JarFile
 
 name := "bundled-runtime-docs-test"
 
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOPolicyEnablePublish := false
 releaseIOPolicyEnablePush    := false

@@ -20,21 +20,21 @@ the published core artifact.
 ### Compatibility lane (sbt 1)
 
 ```bash
-sbt --server --sbt-version 1.12.3 compile
-sbt --server --sbt-version 1.12.3 test
+sbt --server --sbt-version 1.13.1 compile
+sbt --server --sbt-version 1.13.1 test
 ```
 
 **Note:** Prefer `./bin/sbt2-clean ...` for local sbt 2 work. It copies the current working tree
 to a temporary directory while filtering known generated IDE/build files such as
 `project/metals.sbt` and `.bloop/`; non-excluded untracked files are included. Plain `sbt ...`
-uses sbt 2.0.0 from `project/build.properties`; use the direct lane only when needed or from a
+uses sbt 2.0.12 from `project/build.properties`; use the direct lane only when needed or from a
 known-clean checkout/CI environment.
 
 ### Verification Expectations
 
 - If a change affects runtime behavior, command execution, release flow, or source compatibility,
   verify it on both supported sbt lines:
-  - sbt 1: `sbt --server --sbt-version 1.12.3 ...`
+  - sbt 1: `sbt --server --sbt-version 1.13.1 ...`
   - sbt 2: `./bin/sbt2-clean ...`
 - If you touch version-specific test compat or source-split code, inspect and update both
   `scala-2` and `scala-3` source roots when applicable.
@@ -147,7 +147,7 @@ The stable built-in phase names are:
 ## Conventions
 
 - Scala 2.12 (sbt 1) and Scala 3 (sbt 2) cross-build
-- Max line length: **100 columns** (enforced by scalafmt 3.10.7)
+- Max line length: **100 columns** (enforced by scalafmt 3.11.5)
 - Tests use **MUnit** with **munit-cats-effect** for IO assertions
 - Scripted tests live under `src/sbt-test/` in each module. When adding a new fixture, also list it under the relevant bullet in the matching `src/sbt-test/README.md` ([core](modules/core/src/sbt-test/README.md), [monorepo](modules/monorepo/src/sbt-test/README.md)) — the README is the only index of what scripted scenarios exist
 - All blocking operations wrapped in `IO.blocking`
@@ -188,10 +188,10 @@ helpers, but build-facing customization should use hooks, policies, and resource
 
 ## Dependencies
 
-- `cats-effect 3.7.0` — async/resource management
-- `munit 1.3.0` + `munit-cats-effect 2.2.0` — testing
-- `sbt-scalafmt 2.5.6` — formatting
-- `sbt-ci-release 1.11.2` — Maven Central publishing
+- `cats-effect 3.7.1` — async/resource management
+- `munit 1.3.6` + `munit-cats-effect 2.2.1` — testing
+- `sbt-scalafmt 2.6.2` — formatting
+- `sbt-ci-release 1.12.1` — Maven Central publishing
 
 ## CI
 

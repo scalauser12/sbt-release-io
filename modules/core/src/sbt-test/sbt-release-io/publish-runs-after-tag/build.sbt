@@ -2,7 +2,7 @@ import scala.sys.process.*
 import sbt.IO
 
 name         := "publish-runs-after-tag"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 // Regression: with `publish / skip := isSnapshot.value` and a configured
 // publishTo, the release-version session overlay applied by

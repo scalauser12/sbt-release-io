@@ -5,9 +5,9 @@ import _root_.io.release.ReleaseHookIO
 
 name := "hook-disabled-phases"
 
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
-libraryDependencies += "org.scalameta" %% "munit" % "1.2.4" % Test
+libraryDependencies += "org.scalameta" %% "munit" % "1.3.6" % Test
 testFrameworks += new TestFramework("munit.Framework")
 
 releaseIOVcsIgnoreUntrackedFiles := true

@@ -2,7 +2,7 @@ import scala.sys.process.*
 import sbt.IO
 
 name         := "untracked-files-fail-test"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 // Default releaseIOVcsIgnoreUntrackedFiles is false — untracked files should block release
 releaseIOPolicyEnablePublish := false

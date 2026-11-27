@@ -5,7 +5,7 @@ import _root_.io.release.ReleaseHookIO
 
 name := "push-race-before-push-test"
 
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOPolicyEnablePublish     := false
 releaseIOPolicyEnableRunClean    := false

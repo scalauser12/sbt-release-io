@@ -3,7 +3,7 @@ import scala.sys.process.*
 lazy val sub = (project in file("sub"))
   .settings(
     name         := "sub",
-    scalaVersion := "2.12.18"
+    scalaVersion := "2.12.21"
   )
 
 // Loaded by sbt but intentionally omitted from the monorepo participant setting.
@@ -12,7 +12,7 @@ lazy val sub = (project in file("sub"))
 lazy val ignored = (project in file("ignored-declared"))
   .settings(
     name          := "ignored",
-    scalaVersion  := "2.12.18",
+    scalaVersion  := "2.12.21",
     baseDirectory := file("ignored-live")
   )
 
@@ -21,7 +21,7 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
     name         := "root-proj",
-    scalaVersion := "2.12.18",
+    scalaVersion := "2.12.21",
 
     // Include root project itself alongside aggregated sub-projects. `ignored`
     // is loaded but not aggregated, so it is deliberately nonparticipating.

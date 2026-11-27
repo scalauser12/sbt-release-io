@@ -3,7 +3,7 @@ import scala.sys.process.*
 lazy val eligible = (project in file("eligible"))
   .settings(
     name           := "eligible-custom-action",
-    scalaVersion   := "2.12.18",
+    scalaVersion   := "2.12.21",
     publish / skip := false,
     publishTo      := Some(Resolver.file("validation-only", target.value / "publish-repo")),
     releaseIOPublishAction :=
@@ -13,7 +13,7 @@ lazy val eligible = (project in file("eligible"))
 lazy val skipped = (project in file("skipped"))
   .settings(
     name                   := "skipped-custom-action",
-    scalaVersion           := "2.12.18",
+    scalaVersion           := "2.12.21",
     version                := "9.9.9",
     publish / skip         := true,
     // This custom action deliberately ignores publish / skip. Core must filter its
@@ -26,7 +26,7 @@ lazy val root = (project in file("."))
   .aggregate(eligible, skipped)
   .settings(
     name           := "publish-skipped-custom-action-filtered",
-    scalaVersion   := "2.12.18",
+    scalaVersion   := "2.12.21",
     publish / skip := true,
 
     releaseIOVcsIgnoreUntrackedFiles := true,

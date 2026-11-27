@@ -5,7 +5,7 @@ import sbt.Keys.*
 // VCS root must fail at validate time (`releaseIO check`) before any execute-time
 // mutation of the external file.
 name         := "version-file-outside-vcs"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOVcsIgnoreUntrackedFiles := true
 releaseIOPolicyEnableRunTests    := false

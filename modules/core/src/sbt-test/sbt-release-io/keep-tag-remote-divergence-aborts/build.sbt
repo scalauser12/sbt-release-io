@@ -7,7 +7,7 @@ import scala.sys.process.*
 // AFTER publish has already run. The hash-aware keep probe must abort at
 // tag-preflight instead, before any version write, commit, or publish.
 name         := "keep-tag-remote-divergence-aborts-test"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOPolicyEnablePublish     := false
 releaseIOPolicyEnableRunClean    := false

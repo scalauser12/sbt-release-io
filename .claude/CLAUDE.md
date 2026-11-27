@@ -17,6 +17,6 @@ sbt scalafmtSbtCheck       # check sbt/build file formatting
 ### Compatibility lane (sbt 1)
 
 ```bash
-sbt --server --sbt-version 1.12.3 compile
-sbt --server --sbt-version 1.12.3 test
+sbt --server --sbt-version 1.13.1 compile
+sbt --server --sbt-version 1.13.1 test
 ```

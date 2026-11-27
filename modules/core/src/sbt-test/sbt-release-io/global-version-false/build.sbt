@@ -1,7 +1,7 @@
 import sbt.IO
 
 name         := "global-version-false-test"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOVersioningUseGlobal     := false
 releaseIOVcsIgnoreUntrackedFiles := true

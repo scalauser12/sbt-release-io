@@ -5,7 +5,7 @@
 // only modelled the operator's push answer and not whether `push-changes` was
 // configured at all, so this scenario aborted spuriously.
 name         := "push-disabled-skips-remote-tag-probe-test"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOPolicyEnablePush        := false
 releaseIOPolicyEnablePublish     := false

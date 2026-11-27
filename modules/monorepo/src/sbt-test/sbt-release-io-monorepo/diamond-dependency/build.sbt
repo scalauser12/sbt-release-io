@@ -2,19 +2,19 @@ import scala.sys.process.*
 import _root_.io.release.monorepo.MonorepoProjectHookIO
 
 lazy val base = (project in file("base"))
-  .settings(name := "base", scalaVersion := "2.12.18")
+  .settings(name := "base", scalaVersion := "2.12.21")
 
 lazy val left = (project in file("left"))
   .dependsOn(base)
-  .settings(name := "left", scalaVersion := "2.12.18")
+  .settings(name := "left", scalaVersion := "2.12.21")
 
 lazy val right = (project in file("right"))
   .dependsOn(base)
-  .settings(name := "right", scalaVersion := "2.12.18")
+  .settings(name := "right", scalaVersion := "2.12.21")
 
 lazy val top = (project in file("top"))
   .dependsOn(left, right)
-  .settings(name := "top", scalaVersion := "2.12.18")
+  .settings(name := "top", scalaVersion := "2.12.21")
 
 val checkAll        = taskKey[Unit]("Run all verification checks")
 val recordOrderHook = MonorepoProjectHookIO.sideEffect("record-order") { (project, _) =>

@@ -1,7 +1,7 @@
 import scala.sys.process.*
 
 name         := "push-changes-test"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 // Keep push-changes; filter out publish-artifacts, run-clean, run-tests
 releaseIOPolicyEnablePublish  := false

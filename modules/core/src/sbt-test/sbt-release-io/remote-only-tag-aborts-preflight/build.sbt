@@ -8,7 +8,7 @@ import scala.sys.process.*
 // previous behaviour deferred the failure to the final atomic push, leaving
 // artifacts published and the next-version commit recorded.
 name         := "remote-only-tag-aborts-preflight-test"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOPolicyEnablePublish     := false
 releaseIOPolicyEnableRunClean    := false

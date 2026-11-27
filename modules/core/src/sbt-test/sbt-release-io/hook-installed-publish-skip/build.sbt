@@ -4,7 +4,7 @@ import sbt.Keys.*
 import _root_.io.release.ReleaseHookIO
 
 name         := "hook-installed-publish-skip"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 // Regression: a `beforePublish` hook that installs `publish/skip := true`
 // must be observed by the publish task. Persistent overlays from

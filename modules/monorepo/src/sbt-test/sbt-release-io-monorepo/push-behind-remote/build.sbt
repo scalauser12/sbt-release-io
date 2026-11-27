@@ -3,7 +3,7 @@ import scala.sys.process.*
 lazy val core = (project in file("core"))
   .settings(
     name         := "core",
-    scalaVersion := "2.12.18"
+    scalaVersion := "2.12.21"
   )
 
 val checkNoVersionChange = taskKey[Unit]("Verify version files unchanged after validate failure")

@@ -9,7 +9,7 @@ import _root_.io.release.ReleaseHookIO
 // the gate was frozen at validate time, so afterPublish hooks fired against a
 // publish that never actually happened.
 name         := "after-publish-gate-streams"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 publish / skip := false
 publishTo      := Some(Resolver.file("local-test", baseDirectory.value / "publish-target"))

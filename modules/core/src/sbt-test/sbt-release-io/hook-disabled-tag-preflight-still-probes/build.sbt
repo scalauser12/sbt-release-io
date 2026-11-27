@@ -13,7 +13,7 @@ import _root_.io.release.ReleaseHookIO
 // fires after `resolveTagPlan` resolves the post-hook tag name, so the
 // abort happens before `publish-artifacts` runs.
 name         := "hook-disabled-tag-preflight-still-probes-test"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOPolicyEnablePublish     := false
 releaseIOPolicyEnableRunClean    := false

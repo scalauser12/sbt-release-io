@@ -1,7 +1,7 @@
 import scala.sys.process.*
 
 name         := "version-bump-test"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOVcsIgnoreUntrackedFiles := true
 

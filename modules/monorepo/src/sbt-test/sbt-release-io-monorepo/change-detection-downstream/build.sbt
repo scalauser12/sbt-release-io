@@ -3,21 +3,21 @@ import scala.sys.process.*
 lazy val core = (project in file("core"))
   .settings(
     name         := "core",
-    scalaVersion := "2.12.18"
+    scalaVersion := "2.12.21"
   )
 
 lazy val api = (project in file("api"))
   .dependsOn(core)
   .settings(
     name         := "api",
-    scalaVersion := "2.12.18"
+    scalaVersion := "2.12.21"
   )
 
 lazy val web = (project in file("web"))
   .dependsOn(api)
   .settings(
     name         := "web",
-    scalaVersion := "2.12.18"
+    scalaVersion := "2.12.21"
   )
 
 lazy val root = (project in file("."))

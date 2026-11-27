@@ -1,7 +1,7 @@
 import _root_.io.release.monorepo.MonorepoProjectHookIO
 
-val Scala212 = "2.12.18"
-val Scala213 = "2.13.12"
+val Scala212 = "2.12.21"
+val Scala213 = "2.13.18"
 
 lazy val core = (project in file("core"))
   .settings(

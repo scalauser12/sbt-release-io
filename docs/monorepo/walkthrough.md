@@ -27,7 +27,7 @@ addSbtPlugin("io.github.scalauser12" % "sbt-release-io-monorepo" % "0.13.7")
 `project/build.properties`:
 
 ```properties
-sbt.version=1.12.3
+sbt.version=1.13.1
 ```
 
 > **Tip:** Pin `sbt.version` up front. Otherwise sbt auto-creates `project/build.properties`

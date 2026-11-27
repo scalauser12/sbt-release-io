@@ -11,7 +11,7 @@ import sbt.Keys.*
 // cleanly. Pairs with `push-decision-no-skips-remote-warmup` which covers the
 // explicit `Some(false)` answer; this test covers the implicit-decline path.
 name         := "push-decision-non-interactive-no-warmup"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOVcsIgnoreUntrackedFiles := true
 releaseIOPolicyEnableRunTests    := false

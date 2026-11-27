@@ -8,7 +8,7 @@ import _root_.io.release.ReleaseHookIO
 // `releaseIOVersioningFile` pointing outside the VCS root must be caught at
 // `set-release-version` execute time — before any mutation of the external file.
 name         := "late-bound-version-file-outside-vcs"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOVcsIgnoreUntrackedFiles := true
 releaseIOPolicyEnableRunTests    := false

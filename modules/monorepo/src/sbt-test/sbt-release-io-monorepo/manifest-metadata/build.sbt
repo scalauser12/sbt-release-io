@@ -9,7 +9,7 @@ import sbt.PackageOption
 lazy val core = (project in file("core"))
   .settings(
     name         := "core",
-    scalaVersion := "2.12.18",
+    scalaVersion := "2.12.21",
     publishTo    := Some(Resolver.file("test-repo", baseDirectory.value / "target" / "test-repo"))
   )
 
@@ -17,7 +17,7 @@ lazy val api = (project in file("api"))
   .dependsOn(core)
   .settings(
     name         := "api",
-    scalaVersion := "2.12.18",
+    scalaVersion := "2.12.21",
     publishTo    := Some(Resolver.file("test-repo", baseDirectory.value / "target" / "test-repo"))
   )
 
@@ -74,7 +74,7 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
     name                                  := "manifest-metadata-monorepo",
-    scalaVersion                          := "2.12.18",
+    scalaVersion                          := "2.12.21",
     releaseIOMonorepoPolicyEnablePush     := false,
     releaseIOMonorepoHooksAfterNextCommit := Seq(
       MonorepoGlobalHookIO.sideEffect("record-visible-release-metadata") { ctx =>

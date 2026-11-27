@@ -3,8 +3,8 @@ import sbt.*
 import sbt.Keys.*
 import _root_.io.release.ReleaseHookIO
 
-val Scala213 = "2.13.12"
-val Scala212 = "2.12.18"
+val Scala213 = "2.13.18"
+val Scala212 = "2.12.21"
 
 name := "cross-test"
 
@@ -12,7 +12,7 @@ scalaVersion := Scala213
 
 crossScalaVersions := Seq(Scala213, Scala212)
 
-libraryDependencies += "org.scalameta" %% "munit" % "1.2.4" % Test
+libraryDependencies += "org.scalameta" %% "munit" % "1.3.6" % Test
 testFrameworks += new TestFramework("munit.Framework")
 
 releaseIOPolicyEnablePush := false

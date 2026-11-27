@@ -26,17 +26,17 @@ lazy val root = (project in file("."))
   .aggregate(libA, libB)
   .settings(
     name         := "this-build-overrides-test",
-    scalaVersion := "2.12.18"
+    scalaVersion := "2.12.21"
   )
 
 lazy val libA = (project in file("libA"))
   .settings(
-    scalaVersion := "2.12.18"
+    scalaVersion := "2.12.21"
   )
 
 lazy val libB = (project in file("libB"))
   .settings(
-    scalaVersion := "2.12.18"
+    scalaVersion := "2.12.21"
   )
 
 val checkBuildLevelDefaults =

@@ -2,7 +2,7 @@ import scala.sys.process.*
 
 name := "grouped-keys-test"
 
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOBehaviorInteractive     := true
 releaseIOPolicyEnablePublish     := false

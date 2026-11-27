@@ -7,8 +7,8 @@ import _root_.io.release.monorepo.MonorepoProjectHookIO
 lazy val core = (project in file("core"))
   .settings(
     name                                   := "core",
-    scalaVersion                           := "2.12.18",
-    libraryDependencies += "org.scalameta" %% "munit" % "1.2.4" % Test,
+    scalaVersion                           := "2.12.21",
+    libraryDependencies += "org.scalameta" %% "munit" % "1.3.6" % Test,
     testFrameworks += new TestFramework("munit.Framework")
   )
 

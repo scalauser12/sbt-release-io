@@ -4,7 +4,7 @@ import _root_.io.release.monorepo.MonorepoProjectHookIO
 lazy val core = (project in file("core"))
   .settings(
     name           := "core",
-    scalaVersion   := "2.12.18",
+    scalaVersion   := "2.12.21",
     publish / skip := false,
     publishTo      := Some(Resolver.file("local-test", baseDirectory.value / "repo")),
     publish        := Def
@@ -16,7 +16,7 @@ lazy val core = (project in file("core"))
         val projectRef = extracted.structure.allProjectRefs
           .find(_.project == "core")
           .getOrElse(sys.error("core project ref not found"))
-        extracted.appendWithSession(Seq(projectRef / scalaVersion := "2.13.16"), state)
+        extracted.appendWithSession(Seq(projectRef / scalaVersion := "2.13.18"), state)
       }
       .value
   )
@@ -50,7 +50,7 @@ lazy val root = (project in file("."))
       assert(file("published").exists(), "publish action did not run")
       assert(file("after-publish-hook-ran").exists(), "afterPublish hook did not run")
       assert(
-        sbt.IO.read(file("after-publish-scala")).trim == "2.13.16",
+        sbt.IO.read(file("after-publish-scala")).trim == "2.13.18",
         "afterPublish did not retain the publish task's returned state"
       )
     }

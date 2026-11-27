@@ -65,7 +65,7 @@ def assertUnchanged(before: (Int, List[String], String)): Unit = {
 }
 
 name         := "help-test"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOVcsIgnoreUntrackedFiles := true
 

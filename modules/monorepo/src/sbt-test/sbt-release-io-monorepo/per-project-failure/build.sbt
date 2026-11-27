@@ -3,8 +3,8 @@ import scala.sys.process.*
 lazy val core = (project in file("core"))
   .settings(
     name                                   := "core",
-    scalaVersion                           := "2.12.18",
-    libraryDependencies += "org.scalameta" %% "munit" % "1.2.4" % Test,
+    scalaVersion                           := "2.12.21",
+    libraryDependencies += "org.scalameta" %% "munit" % "1.3.6" % Test,
     testFrameworks += new TestFramework("munit.Framework")
   )
 
@@ -12,8 +12,8 @@ lazy val api = (project in file("api"))
   .dependsOn(core)
   .settings(
     name                                   := "api",
-    scalaVersion                           := "2.12.18",
-    libraryDependencies += "org.scalameta" %% "munit" % "1.2.4" % Test,
+    scalaVersion                           := "2.12.21",
+    libraryDependencies += "org.scalameta" %% "munit" % "1.3.6" % Test,
     testFrameworks += new TestFramework("munit.Framework")
   )
 

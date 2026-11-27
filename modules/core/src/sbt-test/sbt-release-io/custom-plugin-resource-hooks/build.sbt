@@ -4,7 +4,7 @@ import _root_.io.release.ReleaseHookIO
 
 name := "custom-plugin-resource-hooks"
 
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOVcsIgnoreUntrackedFiles := true
 releaseIOPolicyEnablePublish     := false

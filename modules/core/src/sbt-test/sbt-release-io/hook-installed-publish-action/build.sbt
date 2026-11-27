@@ -4,7 +4,7 @@ import sbt.Keys.*
 import _root_.io.release.ReleaseHookIO
 
 name         := "hook-installed-publish-action"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 // Regression: a `beforePublish` hook that installs a custom
 // `releaseIOPublishAction` via `appendWithSession` must be observed by

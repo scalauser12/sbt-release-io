@@ -6,14 +6,14 @@ import scala.sys.process.*
 lazy val api = (project in file("services/api"))
   .settings(
     name         := "api",
-    scalaVersion := "2.12.18"
+    scalaVersion := "2.12.21"
   )
 
 lazy val services = (project in file("services"))
   .aggregate(api)
   .settings(
     name         := "services",
-    scalaVersion := "2.12.18"
+    scalaVersion := "2.12.21"
   )
 
 lazy val root = (project in file("."))
@@ -21,7 +21,7 @@ lazy val root = (project in file("."))
   .enablePlugins(MonorepoReleasePlugin)
   .settings(
     name         := "nested-parent-test",
-    scalaVersion := "2.12.18",
+    scalaVersion := "2.12.21",
 
     releaseIOMonorepoDetectionEnabled := true,
 

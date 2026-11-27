@@ -68,7 +68,7 @@ def nestedBaseCommand(sbtVersion0: String, pluginVersion0: String): Seq[String] 
 lazy val core = (project in file("core"))
   .settings(
     name         := "publish-to-eval-error-core",
-    scalaVersion := "2.12.18"
+    scalaVersion := "2.12.21"
   )
 
 lazy val root = (project in file("."))

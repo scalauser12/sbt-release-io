@@ -13,13 +13,13 @@ requires it.
 ### sbt 1 (Scala 2.12 compatibility lane)
 
 ```bash
-sbt --server --sbt-version 1.12.3 compile              # compile all modules
-sbt --server --sbt-version 1.12.3 test                 # run unit tests (MUnit)
-sbt --server --sbt-version 1.12.3 core/test            # core unit tests only
-sbt --server --sbt-version 1.12.3 monorepo/test        # monorepo unit tests only
-sbt --server --sbt-version 1.12.3 scripted             # run every scripted integration test
-sbt --server --sbt-version 1.12.3 "core/scripted sbt-release-io/<test-name>"
-sbt --server --sbt-version 1.12.3 "monorepo/scripted sbt-release-io-monorepo/<test-name>"
+sbt --server --sbt-version 1.13.1 compile              # compile all modules
+sbt --server --sbt-version 1.13.1 test                 # run unit tests (MUnit)
+sbt --server --sbt-version 1.13.1 core/test            # core unit tests only
+sbt --server --sbt-version 1.13.1 monorepo/test        # monorepo unit tests only
+sbt --server --sbt-version 1.13.1 scripted             # run every scripted integration test
+sbt --server --sbt-version 1.13.1 "core/scripted sbt-release-io/<test-name>"
+sbt --server --sbt-version 1.13.1 "monorepo/scripted sbt-release-io-monorepo/<test-name>"
 ```
 
 Use both runner options so the sbt 1 override wins even though `project/build.properties`
@@ -37,8 +37,8 @@ Prefer the helper script for local checkouts so generated IDE files
 ./bin/sbt2-clean monorepo/scripted
 ```
 
-Plain `sbt ...` uses sbt 2.0.0 from `project/build.properties`. The explicit
-`sbt --server --sbt-version 2.0.0 ...` form works from a clean checkout / CI.
+Plain `sbt ...` uses sbt 2.0.12 from `project/build.properties`. The explicit
+`sbt --server --sbt-version 2.0.12 ...` form works from a clean checkout / CI.
 
 ## Formatting
 
@@ -71,7 +71,7 @@ tests verify code; scripted tests verify behavior.
 Branch off `main`. Before opening a PR, run:
 
 1. `sbt "scalafmtCheckAll; scalafmtSbtCheck"`
-2. `sbt --server --sbt-version 1.12.3 test` and `./bin/sbt2-clean test`
+2. `sbt --server --sbt-version 1.13.1 test` and `./bin/sbt2-clean test`
 3. Targeted scripted tests for the area you touched (full `scripted` is
    slow — let CI cover the long pole).
 

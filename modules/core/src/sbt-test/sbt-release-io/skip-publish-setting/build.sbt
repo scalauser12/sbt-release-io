@@ -1,5 +1,5 @@
 name         := "skip-publish-setting-test"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 // No publishTo configured and no `publish / skip := true`.
 // Only releaseIOBehaviorSkipPublish is set — this should skip the entire publish step.

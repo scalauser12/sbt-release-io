@@ -5,7 +5,7 @@ import _root_.io.release.monorepo.MonorepoReleasePlugin.autoImport.*
 lazy val core = (project in file("core"))
   .settings(
     name         := "core",
-    scalaVersion := "2.12.18"
+    scalaVersion := "2.12.21"
   )
 
 val checkAll = taskKey[Unit]("Run all verification checks")

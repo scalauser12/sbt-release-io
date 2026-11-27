@@ -10,7 +10,7 @@ import _root_.io.release.ReleaseHookIO
 // in the compiled pipeline; the runtime narrow gate is what suppresses the
 // hook when the push step took the `onDeclinePush` branch.
 name         := "after-push-hook-gated"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOVcsIgnoreUntrackedFiles := true
 releaseIOPolicyEnableRunTests    := false

@@ -1,7 +1,7 @@
 import scala.sys.process.*
 
 name         := "custom-version-format-test"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 // Point releaseIOVersioningFile to a properties file instead of the default version.sbt
 releaseIOVersioningFile := baseDirectory.value / "version.properties"

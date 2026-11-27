@@ -31,8 +31,8 @@ Add the dependency in `project/plugins.sbt` alongside the plugin. This adds the 
 ```scala
 addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.13.7")
 libraryDependencies ++= Seq(
-  "org.http4s" %% "http4s-ember-client" % "0.23.30",
-  "co.fs2"     %% "fs2-io"              % "3.11.0"
+  "org.http4s" %% "http4s-ember-client" % "0.23.39",
+  "co.fs2"     %% "fs2-io"              % "3.16.0"
 )
 ```
 

@@ -1,7 +1,7 @@
 import sbt.IO
 
 name         := "interactive-with-defaults-test"
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 releaseIOVcsIgnoreUntrackedFiles := true
 releaseIOBehaviorInteractive     := true

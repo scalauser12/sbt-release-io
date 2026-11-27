@@ -64,11 +64,6 @@ lazy val root = (project in file("."))
     publish / skip := true
   )
 
-Global / excludeLintKeys ++= Set(
-  ThisBuild / git.gitUncommittedChanges,
-  root / git.gitDescribedVersion
-) ++ allModuleRefs.map(_ / git.gitDescribedVersion)
-
 // Some test suites redirect System.in or exercise shared sbt state, so keep
 // unit-test execution deterministic across aggregated projects as well.
 Global / concurrentRestrictions += Tags.limit(Tags.Test, 1)

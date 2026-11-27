@@ -3,7 +3,7 @@ import sbt.IO
 
 name := "snapshot-deps-test-scope-test"
 
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.21"
 
 libraryDependencies += "org.example" %% "fake-lib" % "1.0.0-SNAPSHOT" % Test
 

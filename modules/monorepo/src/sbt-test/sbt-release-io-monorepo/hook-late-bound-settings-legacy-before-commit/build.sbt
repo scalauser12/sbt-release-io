@@ -14,13 +14,13 @@ import _root_.io.release.monorepo.MonorepoGlobalHookIO
 lazy val core = (project in file("core"))
   .settings(
     name         := "core",
-    scalaVersion := "2.12.18"
+    scalaVersion := "2.12.21"
   )
 
 lazy val api = (project in file("api"))
   .settings(
     name         := "api",
-    scalaVersion := "2.12.18"
+    scalaVersion := "2.12.21"
   )
 
 val checkLateBoundVersionFiles =
