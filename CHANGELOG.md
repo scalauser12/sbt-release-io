@@ -4,6 +4,37 @@ This changelog aggregates the published GitHub releases for
 [`scalauser12/sbt-release-io`](https://github.com/scalauser12/sbt-release-io).
 This file is the canonical release history for the repository.
 
+## v0.13.8
+
+Published: 2026-11-27<br>
+GitHub release: [v0.13.8](https://github.com/scalauser12/sbt-release-io/releases/tag/v0.13.8)
+
+`v0.13.8` is a dependency and build maintenance release for both plugins.
+
+### Improvements
+
+- Update Cats Effect from `3.7.0` to `3.7.1` for both plugins.
+
+### CI & Build
+
+- Build and test against sbt `1.13.1` and `2.0.12`, with sbt 2 as the default
+  build and Maven Central publishing lane. CI continues to use JDK 17.
+- Update sbt-ci-release to `1.12.1`, sbt-scalafmt to `2.6.2`, and Scalafmt to
+  `3.11.5`. Use sbt-scalafmt on both sbt lines.
+- Update MUnit, MUnit Cats Effect, the Scala Meta parser, and the Scala 2.13
+  scripted fixtures. Update the GitHub Actions checkout and Java setup actions.
+
+### Documentation
+
+- Update the build and test commands for the new sbt versions and refresh the
+  installation examples for `0.13.8`.
+
+### Verification
+
+- [GitHub Actions](https://github.com/scalauser12/sbt-release-io/actions/runs/46005643178)
+  passed formatting, unit tests, core and monorepo scripted suites, and
+  publish-local smoke tests across the configured sbt lanes.
+
 ## v0.13.7
 
 Published: 2026-07-22<br>

@@ -20,7 +20,7 @@
 Add to `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.13.7")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.13.8")
 ```
 
 The project needs a `version.sbt` file:

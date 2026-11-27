@@ -29,7 +29,7 @@ Add the dependency in `project/plugins.sbt` alongside the plugin. This adds the 
 *build's* classpath, where hooks run — not to your project's runtime dependencies.
 
 ```scala
-addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.13.7")
+addSbtPlugin("io.github.scalauser12" % "sbt-release-io" % "0.13.8")
 libraryDependencies ++= Seq(
   "org.http4s" %% "http4s-ember-client" % "0.23.39",
   "co.fs2"     %% "fs2-io"              % "3.16.0"
